@@ -1,0 +1,432 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Setup IAM role, launch instance with Instance Store, if there are multiple devices, then create RAID0 device, setup NFS server, export NFS share",
+  "Metadata" : {
+    "AWS::CloudFormation::Interface" : {
+      "ParameterGroups": [
+        {
+          "Label": {
+            "default": "Instance Parameters"
+          },
+          "Parameters": [
+            "VPCId",
+            "Subnet",
+            "UsePublicIp",
+            "KeyName",
+            "NFSInstanceType",
+            "SSHLocation",
+            "ExistingSecurityGroup",
+            "PlacementGroup",
+            "BucketName"
+          ]
+        },
+        {
+          "Label": {
+            "default": "Storage Options"
+          },
+          "Parameters": [
+            "RAIDLevel"
+          ]
+        },
+        {
+          "Label": {
+            "default": "NFS Options"
+          },
+          "Parameters": [
+            "NFSCidr",
+            "NFSOpts"
+          ]
+        }
+      ]
+    }
+  },
+  "Resources": {
+    "NFSInstance": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "InstanceType"        : { "Ref" : "NFSInstanceType" },
+        "SubnetId"            : { "Ref" : "Subnet" },
+        "ImageId"             : { "Fn::FindInMap" :  [ "AWSRegionAMI", { "Ref" : "AWS::Region" } , "HVM64" ] },
+        "KeyName"             : { "Ref": "KeyName"  },
+        "SecurityGroupIds"    : [ { "Ref": "NFSSecurityGroup" },
+                                  { "Ref": "SSHSecurityGroup" },
+                                  {
+                                    "Fn::If" : [
+                                      "UseExistingSecurityGroup",
+                                      {
+                                        "Ref" : "ExistingSecurityGroup"
+                                      },
+                                      {
+                                        "Ref" : "AWS::NoValue"
+                                      }
+                                    ]
+                                  }
+                                ],
+        "PlacementGroupName"  : { "Ref":  "PlacementGroup"},
+        "IamInstanceProfile"  : { "Ref": "RootInstanceProfile" },
+        "UserData"            : { "Fn::Base64" : { "Fn::Join" : ["", [
+          "#!/bin/bash -x\n",
+          "echo check > /tmp/file.txt\n",
+          "count=0\n",
+          "function mk_raid {\n",
+          "  let raid_devs=$nvme_last_dev+1\n",
+          "  yes | sudo mdadm --create --verbose /dev/md0 --level=", { "Ref": "RAIDLevel" }, " --name=raid-vol1 --raid-devices=$raid_devs /dev/nvme[0-$nvme_last_dev]n1\n",
+          "}\n",
+          "function mk_fs {\n",
+          "  sudo mkfs.ext4 -L fs1 $fs_dev -E nodiscard\n",
+          "  sudo mkdir /fs1\n",
+          "  sudo mount LABEL=fs1 /fs1\n",
+          "  sudo su -c \"echo 'LABEL=fs1       /fs1   ext4    defaults,nofail        0       2' >> /etc/fstab\"\n",
+          "}\n",
+          "function ck_devs {\n",
+          "  i_type=$(curl http://169.254.169.254/latest/meta-data/instance-type)\n",
+          "  if [[ \"$i_type\" == \"i3.16xlarge\" ]]; then\n",
+          "    nvme_last_dev=\"7\"\n",
+          "  elif [[ \"$i_type\" == \"i3.8xlarge\" ]]; then\n",
+          "    nvme_last_dev=\"3\"\n",
+          "  elif [[ \"$i_type\" == \"i3.4xlarge\" ]]; then\n",
+          "    nvme_last_dev=\"1\"\n",
+          "  else\n",
+          "    nvme_last_dev=\"0\"\n",
+          "    single_ssd=\"True\"\n",
+          "  fi\n",
+          "  devs_ready=0\n",
+          "  for l in $(seq 0 $nvme_last_dev); do\n",
+          "    if [[ ! -b /dev/nvme${l}n1 ]]; then\n",
+          "      devs_ready=0\n",
+          "      ((count = $count + 1))\n",
+          "      if [[ $count -gt 30 ]]; then\n",
+          "        echo \"Devices not ready, exiting...\"\n",
+          "        exit\n",
+          "      else\n",
+          "        sleep 10\n",
+          "        ck_devs\n",
+          "      fi\n",
+          "    else\n",
+          "      devs_ready=1\n",
+          "    fi\n",
+          "  done\n",
+          "  echo \"Devices ready.\"\n",
+          "}\n",
+          "function nfs_server_settings { \n",
+          "  sudo su -c 'echo -e \"",
+          "STATD_PORT=\\\"32765\\\"\\n",
+          "STATD_OUTGOING_PORT=\\\"32766\\\"\\n",
+          "STATDARG=\\\"-p 32765 -o 32766\\\"\\n",
+          "MOUNTD_PORT=\\\"32767\\\"\\n",
+          "RPCMOUNTDOPTS=\\\"-p 32767\\\"\n",
+          "LOCKD_UDPPORT=\\\"32768\\\"\\n",
+          "LOCKD_TCPPORT=\\\"32768\\\"\\n",
+          "RQUOTAD_PORT=\\\"32769\\\"\\n",
+          "RQUOTAD=\\\"no\\\"\\n",
+          "RPCNFSDCOUNT=\\\"128\\\"\"' > /etc/sysconfig/nfs \n",
+          "} \n",
+          "function nfs_config { \n",
+          "  nfs_server_settings \n",
+          "  sudo su -c 'echo \"/fs1 ", { "Ref": "NFSCidr" }, { "Ref": "NFSOpts" }, "\" > /etc/exports' \n",
+          "  sudo chkconfig nfs on \n",
+          "  sudo /etc/init.d/nfs start \n",
+          "  sudo exportfs -av \n",
+          "  sudo showmount -e localhost \n",
+          "} \n",
+          "function status_ec2_signal {\n",
+          "  sudo mount | grep \"/fs1\"\n",
+          "  let fs_mount_rc=$?\n",
+          "  sudo showmount -e localhost | grep -v Export | grep \"/fs1\"\n",
+          "  let nfs_status_rc=$?\n",
+          "  if [[ \"$nfs_status_rc\" -eq 0 ]] && [[ \"$fs_mount_rc\" -eq 0 ]]; then\n",
+          "    echo \"NFS installed and configure\"\n",
+          "    curl -X PUT -H 'Content-Type:' --data-binary",
+          "      '{ \"Status\" : \"SUCCESS\",",
+          "      \"Reason\" : \"Instance Launched with file system created and NFS exports\",",
+          "      \"UniqueId\" : \"NFS001\",",
+          "      \"Data\" : \"Instance has launched with file system created and NFS exports.\"}' ",
+          "      \"",  { "Ref" : "MyWaitHandle" } , "\"" , "\n",
+          "  else\n",
+          "    echo \"ERROR: FS and NFS is not installed and configure\"\n",
+          "    curl -X PUT -H 'Content-Type:' --data-binary",
+          "      '{ \"Status\" : \"FAILURE\",",
+          "      \"Reason\" : \"ERROR: FS and NFS is not installed and configure\",",
+          "      \"UniqueId\" : \"NFS002\",",
+          "      \"Data\" : \"ERROR: FS and NFS is not installed and configure\"}' ",
+          "      \"",  { "Ref" : "MyWaitHandle" } , "\"" , "\n",
+          "  fi\n",
+          "}\n",
+          "while [[ ! $devs_ready ]]; do\n",
+          "  ck_devs\n",
+          "done\n",
+          "if [[ \"$single_ssd\" == \"True\" ]]; then\n",
+          "  fs_dev=\"/dev/nvme0n1\"\n",
+          "else\n",
+          "  fs_dev=\"/dev/md0\"\n",
+          "  mk_raid\n",
+          "fi\n",
+          "mk_fs\n",
+          "nfs_config\n",
+          "status_ec2_signal\n"
+        ]]}}
+      }
+    },
+    "RootRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version" : "2012-10-17",
+          "Statement": [ {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": [ "ec2.amazonaws.com" ]
+            },
+            "Action": [ "sts:AssumeRole" ]
+          } ]
+        },
+        "Path": "/",
+        "Policies": [ {
+          "PolicyName": "root",
+          "PolicyDocument": {
+            "Version" : "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Action": [
+                  "s3:ListBucket"
+                ],
+                "Resource": {
+                  "Fn::If": [
+                    "Has_Bucket",
+                    { "Fn::Join" : [ "", [ "arn:aws:s3:::", { "Ref" : "BucketName" } ] ] },
+                    { "Fn::Join" : [ "", [ "arn:aws:s3:::", "BOGUS_NULL_VALUE" ] ] }
+                  ]
+                }
+              },
+              {
+                "Effect": "Allow",
+                "Action": [
+                  "s3:GetObject"
+                ],
+                "Resource": {
+                  "Fn::If": [
+                    "Has_Bucket",
+                    { "Fn::Join" : [ "", [ "arn:aws:s3:::", { "Ref" : "BucketName" } , "/*" ] ] },
+                    { "Fn::Join" : [ "", [ "arn:aws:s3:::", "BOGUS_NULL_VALUE" , "/*" ] ] }
+                  ]
+                }
+              }
+            ]
+          }
+        } ]
+      }
+    },
+    "RootInstanceProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Path": "/",
+        "Roles": [ {
+          "Ref": "RootRole"
+        } ]
+      }
+    },
+    "NFSSecurityGroup": {
+      "Type" : "AWS::EC2::SecurityGroup",
+      "Properties" : {
+        "GroupDescription": "NFS Security Group",
+        "VpcId": {
+          "Ref": "VPCId"
+        },
+        "SecurityGroupIngress": [ {
+          "IpProtocol": "tcp",
+          "FromPort": "2049",
+          "ToPort": "2049",
+          "CidrIp": { "Ref": "NFSCidr" }
+        } ]
+      }
+    },
+    "SSHSecurityGroup": {
+      "Type" : "AWS::EC2::SecurityGroup",
+      "Properties" : {
+        "GroupDescription": "SSH Security Group",
+        "VpcId": {
+          "Ref": "VPCId"
+        },
+        "SecurityGroupIngress": [ {
+          "IpProtocol": "tcp",
+          "FromPort": "22",
+          "ToPort": "22",
+          "CidrIp": { "Ref": "SSHLocation" }
+        } ]
+      }
+    },
+    "MyWaitHandle" : {
+      "Type" : "AWS::CloudFormation::WaitConditionHandle",
+      "Properties" : {
+      }
+    },
+    "WaitDevsExt4Nfs" : {
+      "Type" : "AWS::CloudFormation::WaitCondition",
+      "DependsOn" : "NFSInstance",
+      "Properties" : {
+        "Handle" : { "Ref" : "MyWaitHandle" },
+        "Timeout" : "300"
+      }
+    }
+  },
+  "Parameters": {
+    "NFSInstanceType": {
+      "Description": "NFS instance type",
+      "Type": "String",
+      "Default": "i3.16xlarge",
+      "AllowedValues": [
+        "i3.16xlarge",
+        "i3.8xlarge",
+        "i3.4xlarge",
+        "i3.2xlarge",
+        "i3.xlarge",
+        "i3.large"
+      ],
+      "ConstraintDescription": "Must be an EC2 instance type from the list"
+    },
+    "KeyName": {
+      "Description": "Existing EC2 KeyPair to enable SSH access to the instance.",
+      "Type": "AWS::EC2::KeyPair::KeyName"
+    },
+    "VPCId": {
+      "Type": "AWS::EC2::VPC::Id",
+      "Description": "VPC Id for this instance"
+    },
+    "Subnet": {
+      "Type": "AWS::EC2::Subnet::Id",
+      "Description": "Subnet for this instance"
+    },
+    "UsePublicIp" : {
+      "Description": "Should a public IP address be given to the instance",
+      "Type": "String",
+      "Default": "False",
+      "ConstraintDescription": "True/False",
+      "AllowedValues": [
+        "True",
+        "False"
+      ]
+    },
+    "ExistingSecurityGroup": {
+      "Description": "OPTIONAL: Existing Security Group, format sg-xxxxxxxx",
+      "Type": "String",
+      "Default": "",
+      "AllowedPattern" : "(|^sg-[0-9a-z]{8}$)"
+    },
+    "PlacementGroup" : {
+      "Description" : "Existing placement group",
+      "Type" : "String"
+    },
+    "SSHLocation": {
+      "Description": "REQUIRED: The IP address range that can be used to access the instance using SSH.",
+      "Type": "String",
+      "MinLength": "9",
+      "MaxLength": "18",
+      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+      "Default" : "10.0.0.0/16"
+    },
+    "BucketName": {
+      "Description": "Optional: specify s3 bucket for read (get/list) access only",
+      "Type": "String"
+    },
+    "NFSCidr": {
+      "Description": "CIDR for NFS Security Group and NFS clients, to allow all access use 0.0.0.0/0",
+      "Type": "String",
+      "MinLength": "9",
+      "MaxLength": "18",
+      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+      "Default": "10.0.0.0/16"
+    },
+    "NFSOpts": {
+      "Description": "NFS export options",
+      "Type": "String",
+      "Default": "(rw,sync,no_root_squash)"
+    },
+    "RAIDLevel" : {
+      "Description": "RAID Level, currently only 0 (striping) is supported",
+      "Type": "String",
+      "Default": "0",
+      "AllowedValues": [
+        "0"
+      ],
+      "ConstraintDescription": "Must be 0"
+    }
+  },
+  "Conditions" : {
+    "Has_Bucket" : { "Fn::Not": [ { "Fn::Equals": [ { "Ref" : "BucketName" } , "" ]}]},
+    "UseExistingSecurityGroup" : { "Fn::Not": [ { "Fn::Equals": [ { "Ref" : "ExistingSecurityGroup" } , "" ]}]},
+    "Has_Public_Ip": { "Fn::Equals": [ { "Ref": "UsePublicIp"}, "True" ]}
+  },
+  "Mappings" : {
+    "AWSRegionAMI": {
+      "ap-northeast-1": {
+        "HVM64": "ami-923d12f5"
+      },
+      "ap-northeast-2": {
+        "HVM64": "ami-9d15c7f3"
+      },
+      "ap-south-1": {
+        "HVM64": "ami-52c7b43d"
+      },
+      "ap-southeast-1": {
+        "HVM64": "ami-fc5ae39f"
+      },
+      "ap-southeast-2": {
+        "HVM64": "ami-162c2575"
+      },
+      "ca-central-1": {
+        "HVM64": "ami-0bd66a6f"
+      },
+      "eu-central-1": {
+        "HVM64": "ami-b968bad6"
+      },
+      "eu-west-1": {
+        "HVM64": "ami-01ccc867"
+      },
+      "eu-west-2": {
+        "HVM64": "ami-b6daced2"
+      },
+      "sa-east-1": {
+        "HVM64": "ami-37cfad5b"
+      },
+      "us-east-1": {
+        "HVM64": "ami-c58c1dd3"
+      },
+      "us-east-2": {
+        "HVM64": "ami-4191b524"
+      },
+      "us-west-1": {
+        "HVM64": "ami-7a85a01a"
+      },
+      "us-west-2": {
+        "HVM64": "ami-4836a428"
+      }
+    }
+  },
+  "Outputs" : {
+    "InstanceID" : {
+      "Description": "Instance ID",
+      "Value" : { "Ref" : "NFSInstance" }
+    },
+    "InstancePrivateIP" : {
+      "Value" :  { "Fn::GetAtt" : [ "NFSInstance" , "PrivateIp" ]}
+    },
+    "InstancePublicIP" : {
+      "Value" :  { "Fn::GetAtt" : [ "NFSInstance" , "PublicIp" ]},
+      "Condition" : "Has_Public_Ip"
+    },
+    "PrivateMountPoint" : {
+      "Description": "Mount point on private network",
+      "Value" : { "Fn::Join" :  [ "", [ { "Fn::GetAtt" : [ "NFSInstance" , "PrivateIp" ] } , ":/fs1"  ] ] }
+    },
+    "ExampleClientMountCommands" : {
+      "Description": "Example commands to mount NFS on the clients",
+      "Value" : { "Fn::Join" :  [ "", [ "sudo mkdir /nfs1; sudo mount " , { "Fn::GetAtt" : [ "NFSInstance" , "PrivateIp" ] } , ":/fs1 /nfs1"  ] ] }
+    },
+    "BucketName" : {
+      "Value" : { "Ref" : "BucketName" },
+      "Condition" :  "Has_Bucket"
+    }
+  }
+}
+

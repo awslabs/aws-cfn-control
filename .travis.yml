@@ -1,0 +1,16 @@
+sudo: false
+
+language: python
+
+python:
+  - "2.7"
+
+install:
+  - cd aws-cfn-control
+  - pip install -e .
+  - cd -
+
+script:
+  - sh _tests/test.sh
+
+
