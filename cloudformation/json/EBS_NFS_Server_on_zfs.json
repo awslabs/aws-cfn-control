@@ -1,672 +1,61 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "Currently supporting RHEL/CentOS 7.5.  Setup IAM role and security groups, launch instance, create/attach 10 EBS volumes, install/fix ZFS (http://download.zfsonlinux.org/epel/zfs-release.el7_5.noarch.rpm), create zfs RAID6 pool, setup NFS server, export NFS share",
-  "Metadata" : {
-    "AWS::CloudFormation::Interface" : {
-      "ParameterGroups": [
+  "Conditions": {
+    "Has_Bucket": {
+      "Fn::Not": [
         {
-          "Label": {
-            "default": "Instance Parameters"
-          },
-          "Parameters": [
-            "OS",
-            "VPCId",
-            "Subnet",
-            "UsePublicIp",
-            "KeyName",
-            "NFSInstanceType",
-            "SSHLocation",
-            "ExistingSecurityGroup",
-            "PlacementGroup",
-            "BucketName"
-          ]
-        },
-        {
-          "Label": {
-            "default": "Storage Options - Required"
-          },
-          "Parameters": [
-            "ZfsRAIDLevel",
-            "VolumeSize",
-            "VolumeType",
-            "NFSIops"
-          ]
-        },
-        {
-          "Label": {
-            "default": "ZFS Pool and FS Options - Required"
-          },
-          "Parameters": [
-            "ZfsPool",
-            "ZfsFSMountPoint"
-          ]
-        },
-        {
-          "Label": {
-            "default": "NFS Options - Required"
-          },
-          "Parameters": [
-            "NFSCidr",
-            "NFSOpts"
+          "Fn::Equals": [
+            {
+              "Ref": "S3BucketName"
+            },
+            "NO_VALUE"
           ]
         }
       ]
-    }
-  },
-  "Resources": {
-    "NFSInstance": {
-      "Type": "AWS::EC2::Instance",
-      "Properties": {
-        "InstanceType"        : { "Ref" : "NFSInstanceType" },
-        "SubnetId"            : { "Ref" : "Subnet" },
-        "ImageId"             : { "Fn::FindInMap" :  [ "AWSRegionAMI", { "Ref" : "AWS::Region" } , { "Ref" : "OS" } ] },
-        "KeyName"             : { "Ref": "KeyName"  },
-        "SecurityGroupIds"    : [ { "Ref": "NFSSecurityGroup" },
-                                  { "Ref": "SSHSecurityGroup" },
-                                  {
-                                    "Fn::If" : [
-                                      "UseExistingSecurityGroup",
-                                      {
-                                        "Ref" : "ExistingSecurityGroup"
-                                      },
-                                      {
-                                        "Ref" : "AWS::NoValue"
-                                      }
-                                    ]
-                                  }
-                                ],
-        "PlacementGroupName"  : { "Ref":  "PlacementGroup"},
-        "IamInstanceProfile"  : { "Ref": "RootInstanceProfile" },
-        "UserData"            : { "Fn::Base64" : { "Fn::Join" : ["", [
-          "#!/bin/bash -x\n",
-          "function fix_zfs_repo {\n",
-          "  echo \"Fixing ZFS repo...\"\n",
-          "  sudo cat /etc/yum.repos.d/zfs.repo  | while read l\n",
-          "  do\n",
-          "    if [ \"$l\" == \"[zfs]\" ]; then\n",
-          "      let on_zfs=1\n",
-          "    elif [ \"$l\" == \"[zfs-kmod]\" ]; then\n",
-          "      let on_zfs_kmod=1\n",
-          "    fi\n",
-          "    if [[ \"$on_zfs\" -eq 1 ]] && [[ \"$l\" == \"enabled=1\" ]]; then\n",
-          "      l=\"enabled=0\"\n",
-          "      let on_zfs=0\n",
-          "    elif [[ \"$on_zfs_kmod\" -eq 1 ]] &&  [[ \"$l\" == \"enabled=0\" ]]; then\n",
-          "      l=\"enabled=1\"\n",
-          "      let on_zfs_kmod=0\n",
-          "    fi\n",
-          "    echo $l\n",
-          "  done > /tmp/new_zfs.repo\n",
-          "  sudo cp /etc/yum.repos.d/zfs.repo /etc/yum.repos.d/zfs.repo.dist\n",
-          "  sudo mv /tmp/new_zfs.repo /etc/yum.repos.d/zfs.repo\n",
-          "  echo \"Done fixing ZFS repo\"\n",
-          "}\n",
-          "function zfs_install {\n",
-          "  echo -n \"Fixing and Re-Installing ZFS...\"\n",
-          "  known_zfs_key=\"C93AFFFD9F3F7B03C310CEB6A9D5A1C0F14AB620\"\n",
-          "  sudo yum -y remove zfs zfs-kmod spl spl-kmod libzfs2 libnvpair1 libuutil1 libzpool2 zfs-release\n",
-          "  sudo yum -y install http://download.zfsonlinux.org/epel/zfs-release.el7_5.noarch.rpm\n",
-          "  actual_zfs_key=$(gpg --quiet --with-fingerprint /etc/pki/rpm-gpg/RPM-GPG-KEY-zfsonlinux | grep \"Key fingerprint\" | cut -d\"=\" -f2 | tr -d ' ')\n",
-          "  echo \"Checking keys...\"\n",
-          "  if [[ \"$known_zfs_key\" != \"$actual_zfs_key\" ]]; then\n",
-          "    echo \"ERROR: ZFS installation keys not valid!!!\"\n",
-          "    echo \"Exiting...\"\n",
-          "    exit\n",
-          "  fi\n",
-          "  fix_zfs_repo\n",
-          "  sudo yum -y autoremove\n",
-          "  sudo yum -y clean metadata\n",
-          "  sudo yum -y install zfs\n",
-          "  echo \"Done installing ZFS\"\n",
-          "}\n",
-          "function zfs_create {\n",
-          "  sudo /sbin/modprobe zfs\n",
-          "  modinfo zfs\n",
-          "  sudo zpool create -O compression=lz4 -O atime=off -O sync=disabled -f ", { "Ref": "ZfsPool" }, " -o ashift=12 raidz2  xvdh xvdi xvdj xvdk xvdl xvdm xvdn xvdo xvdp xvdq\n",
-          "  sudo zpool status -v\n",
-          "  sudo zfs create ", {"Ref": "ZfsPool" }, "/",  { "Ref": "ZfsFSMountPoint" }, "\n",
-          "}\n",
-          "function zfs_startup {\n",
-          "  sudo systemctl enable zfs-import-cache\n",
-          "  sudo systemctl enable zfs-mount.service\n",
-          "  sudo systemctl enable zfs.target\n",
-          "}\n",
-          "dev_count=0\n",
-          "function ck_devs {\n",
-          "  devs_ready=0\n",
-          "  for l in {h..q}; do\n",
-          "    if [[ ! -b /dev/xvd${l} ]]; then\n",
-          "      devs_ready=0\n",
-          "      ((dev_count = $dev_count + 1))\n",
-          "      if [[ $dev_count -gt 30 ]]; then\n",
-          "        echo \"Devices not ready, exiting...\"\n",
-          "        exit\n",
-          "      else\n",
-          "        sleep 10\n",
-          "        ck_devs\n",
-          "      fi\n",
-          "    else\n",
-          "      devs_ready=1\n",
-          "    fi\n",
-          "  done\n",
-          "  echo \"Devices ready.\"\n",
-          "}\n",
-          "function nfs_server_settings { \n",
-          "  sudo su -c 'echo -e \"",
-          "STATD_PORT=\\\"32765\\\"\\n",
-          "STATD_OUTGOING_PORT=\\\"32766\\\"\\n",
-          "STATDARG=\\\"-p 32765 -o 32766\\\"\\n",
-          "MOUNTD_PORT=\\\"32767\\\"\\n",
-          "RPCMOUNTDOPTS=\\\"-p 32767\\\"\n",
-          "LOCKD_UDPPORT=\\\"32768\\\"\\n",
-          "LOCKD_TCPPORT=\\\"32768\\\"\\n",
-          "RQUOTAD_PORT=\\\"32769\\\"\\n",
-          "RQUOTAD=\\\"no\\\"\\n",
-          "RPCNFSDCOUNT=\\\"128\\\"\"' > /etc/sysconfig/nfs \n",
-          "} \n",
-          "function nfs_config { \n",
-          "  nfs_server_settings \n",
-          "  sudo su -c 'echo \"/", {"Ref": "ZfsPool" }, "/", { "Ref": "ZfsFSMountPoint" }, " ", { "Ref": "NFSCidr" }, { "Ref": "NFSOpts" }, "\" > /etc/exports' \n",
-          "  sudo systemctl enable rpcbind\n",
-          "  sudo systemctl enable nfs-server\n",
-          "  sudo systemctl start rpcbind\n",
-          "  sudo systemctl start nfs-server\n",
-          "  sudo systemctl start rpc-statd\n",
-          "  showmount -e localhost\n",
-          "} \n",
-          "function inst_updates {\n",
-          "  sudo yum install nfs-utils rpcbind -y\n",
-          "  sudo yum install -y vim\n",
-          "  sudo yum update -y\n",
-          "}\n",
-          "function ck_status {\n",
-          "  zfs_status=$(sudo zpool status | grep state | awk {'print $2'})\n",
-          "  sudo mount | grep ", { "Ref": "ZfsPool" }, "\n",
-          "  let zfs_mount_rc=$?\n",
-          "  sudo showmount -e localhost | grep -v Export | grep \"/", { "Ref" : "ZfsFSMountPoint" }, "\"\n",
-          "  let nfs_status_rc=$?\n",
-          "  if [[ \"$zfs_status\" == \"ONLINE\" ]] && [[ \"$nfs_status_rc\" -eq 0 ]] && [[ \"$zfs_mount_rc\" -eq 0 ]]; then\n",
-          "    echo \"ZFS and NFS installed and configured\"\n",
-          "    curl -X PUT -H 'Content-Type:' --data-binary",
-          "    '{ \"Status\" : \"SUCCESS\",",
-          "    \"Reason\" : \"ZFS and NFS installed and configured\",",
-          "    \"UniqueId\" : \"ZFS001\",",
-          "    \"Data\" : \"ZFS and NFS installed and configured.\"}' ",
-          "    \"",  { "Ref" : "MyWaitHandle" } , "\"" , "\n",
-          "  fi\n",
-          "}\n",
-          "while [[ ! $devs_ready ]]; do\n",
-          "  ck_devs\n",
-          "done\n",
-          "inst_updates\n",
-          "zfs_install\n",
-          "zfs_create\n",
-          "zfs_startup\n",
-          "nfs_config\n",
-          "ck_status\n"
-        ]]}}
-      }
     },
-    "RootRole": {
-      "Type": "AWS::IAM::Role",
-      "Properties": {
-        "AssumeRolePolicyDocument": {
-          "Version" : "2012-10-17",
-          "Statement": [ {
-            "Effect": "Allow",
-            "Principal": {
-              "Service": [ "ec2.amazonaws.com" ]
-            },
-            "Action": [ "sts:AssumeRole" ]
-          } ]
+    "Has_Public_Ip": {
+      "Fn::Equals": [
+        {
+          "Ref": "UsePublicIp"
         },
-        "Path": "/",
-        "Policies": [ {
-          "PolicyName": "root",
-          "PolicyDocument": {
-            "Version" : "2012-10-17",
-            "Statement": [
-              {
-                "Effect": "Allow",
-                "Action": [
-                  "s3:ListBucket"
-                ],
-                "Resource": {
-                  "Fn::If": [
-                    "Has_Bucket",
-                    { "Fn::Join" : [ "", [ "arn:aws:s3:::", { "Ref" : "BucketName" } ] ] },
-                    { "Fn::Join" : [ "", [ "arn:aws:s3:::", "BOGUS_NULL_VALUE" ] ] }
-                  ]
-                }
-              },
-              {
-                "Effect": "Allow",
-                "Action": [
-                  "s3:GetObject"
-                ],
-                "Resource": {
-                  "Fn::If": [
-                    "Has_Bucket",
-                    { "Fn::Join" : [ "", [ "arn:aws:s3:::", { "Ref" : "BucketName" } , "/*" ] ] },
-                    { "Fn::Join" : [ "", [ "arn:aws:s3:::", "BOGUS_NULL_VALUE" , "/*" ] ] }
-                  ]
-                }
-              }
-            ]
-          }
-        } ]
-      }
-    },
-    "RootInstanceProfile": {
-      "Type": "AWS::IAM::InstanceProfile",
-      "Properties": {
-        "Path": "/",
-        "Roles": [ {
-          "Ref": "RootRole"
-        } ]
-      }
-    },
-    "NFSSecurityGroup": {
-      "Type" : "AWS::EC2::SecurityGroup",
-      "Properties" : {
-        "GroupDescription": "NFS Security Group",
-        "VpcId": {
-          "Ref": "VPCId"
-        },
-        "SecurityGroupIngress": [ {
-          "IpProtocol": "tcp",
-          "FromPort": "2049",
-          "ToPort": "2049",
-          "CidrIp": { "Ref": "NFSCidr" }
-        } ]
-      }
-    },
-    "SSHSecurityGroup": {
-      "Type" : "AWS::EC2::SecurityGroup",
-      "Properties" : {
-        "GroupDescription": "SSH Security Group",
-        "VpcId": {
-          "Ref": "VPCId"
-        },
-        "SecurityGroupIngress": [ {
-          "IpProtocol": "tcp",
-          "FromPort": "22",
-          "ToPort": "22",
-          "CidrIp": { "Ref": "SSHLocation" }
-        } ]
-      }
-    },
-    "MyWaitHandle" : {
-      "Type" : "AWS::CloudFormation::WaitConditionHandle",
-      "Properties" : {
-      }
-    },
-    "WaitForZfsNfsConfig" : {
-      "Type" : "AWS::CloudFormation::WaitCondition",
-      "DependsOn" : "NFSInstance",
-      "Properties" : {
-        "Handle" : { "Ref" : "MyWaitHandle" },
-        "Timeout" : "1500"
-      }
-    },
-    "Volume01" : {
-      "Type" : "AWS::EC2::Volume",
-      "Properties" : {
-        "Size" : { "Ref" : "VolumeSize"},
-        "VolumeType" :  { "Ref" : "VolumeType" },
-        "Iops" : { "Fn::If" : [ "Create_io1", { "Ref": "NFSIops"}, { "Ref": "AWS::NoValue" } ] },
-        "Encrypted" : "true",
-        "AvailabilityZone" : { "Fn::GetAtt" : [ "NFSInstance", "AvailabilityZone" ] },
-        "Tags" : [ {
-          "Key" : "Name",
-          "Value" : "NFS_Vol"
-        } ]
-      },
-      "DeletionPolicy" : "Snapshot"
-    },
-    "VolMountPoint01" : {
-      "Type": "AWS::EC2::VolumeAttachment",
-      "Properties": {
-        "InstanceId": { "Ref": "NFSInstance" },
-        "VolumeId": { "Ref": "Volume01" },
-        "Device": "/dev/sdh"
-      }
-    },
-    "Volume02" : {
-      "Type" : "AWS::EC2::Volume",
-      "Properties" : {
-        "Size" : { "Ref" : "VolumeSize"},
-        "VolumeType" :  { "Ref" : "VolumeType" },
-        "Iops" : { "Fn::If" : [ "Create_io1", { "Ref": "NFSIops"}, { "Ref": "AWS::NoValue" } ] },
-        "Encrypted" : "true",
-        "AvailabilityZone" : { "Fn::GetAtt" : [ "NFSInstance", "AvailabilityZone" ] },
-        "Tags" : [ {
-          "Key" : "Name",
-          "Value" : "NFS_Vol"
-        } ]
-      },
-      "DeletionPolicy" : "Snapshot"
-    },
-    "VolMountPoint02" : {
-      "Type": "AWS::EC2::VolumeAttachment",
-      "Properties": {
-        "InstanceId": { "Ref": "NFSInstance" },
-        "VolumeId": { "Ref": "Volume02" },
-        "Device": "/dev/sdi"
-      }
-    },
-    "Volume03" : {
-      "Type" : "AWS::EC2::Volume",
-      "Properties" : {
-        "Size" : { "Ref" : "VolumeSize"},
-        "VolumeType" :  { "Ref" : "VolumeType" },
-        "Iops" : { "Fn::If" : [ "Create_io1", { "Ref": "NFSIops"}, { "Ref": "AWS::NoValue" } ] },
-        "Encrypted" : "true",
-        "AvailabilityZone" : { "Fn::GetAtt" : [ "NFSInstance", "AvailabilityZone" ] },
-        "Tags" : [ {
-          "Key" : "Name",
-          "Value" : "NFS_Vol"
-        } ]
-      },
-      "DeletionPolicy" : "Snapshot"
-    },
-    "VolMountPoint03" : {
-      "Type": "AWS::EC2::VolumeAttachment",
-      "Properties": {
-        "InstanceId": { "Ref": "NFSInstance" },
-        "VolumeId": { "Ref": "Volume03" },
-        "Device": "/dev/sdj"
-      }
-    },
-    "Volume04" : {
-      "Type" : "AWS::EC2::Volume",
-      "Properties" : {
-        "Size" : { "Ref" : "VolumeSize"},
-        "VolumeType" :  { "Ref" : "VolumeType" },
-        "Iops" : { "Fn::If" : [ "Create_io1", { "Ref": "NFSIops"}, { "Ref": "AWS::NoValue" } ] },
-        "Encrypted" : "true",
-        "AvailabilityZone" : { "Fn::GetAtt" : [ "NFSInstance", "AvailabilityZone" ] },
-        "Tags" : [ {
-          "Key" : "Name",
-          "Value" : "NFS_Vol"
-        } ]
-      },
-      "DeletionPolicy" : "Snapshot"
-    },
-    "VolMountPoint04" : {
-      "Type": "AWS::EC2::VolumeAttachment",
-      "Properties": {
-        "InstanceId": { "Ref": "NFSInstance" },
-        "VolumeId": { "Ref": "Volume04" },
-        "Device": "/dev/sdk"
-      }
-    },
-    "Volume05" : {
-      "Type" : "AWS::EC2::Volume",
-      "Properties" : {
-        "Size" : { "Ref" : "VolumeSize"},
-        "VolumeType" :  { "Ref" : "VolumeType" },
-        "Iops" : { "Fn::If" : [ "Create_io1", { "Ref": "NFSIops"}, { "Ref": "AWS::NoValue" } ] },
-        "Encrypted" : "true",
-        "AvailabilityZone" : { "Fn::GetAtt" : [ "NFSInstance", "AvailabilityZone" ] },
-        "Tags" : [ {
-          "Key" : "Name",
-          "Value" : "NFS_Vol"
-        } ]
-      },
-      "DeletionPolicy" : "Snapshot"
-    },
-    "VolMountPoint05" : {
-      "Type": "AWS::EC2::VolumeAttachment",
-      "Properties": {
-        "InstanceId": { "Ref": "NFSInstance" },
-        "VolumeId": { "Ref": "Volume05" },
-        "Device": "/dev/sdl"
-      }
-    },
-    "Volume06" : {
-      "Type" : "AWS::EC2::Volume",
-      "Properties" : {
-        "Size" : { "Ref" : "VolumeSize"},
-        "VolumeType" :  { "Ref" : "VolumeType" },
-        "Iops" : { "Fn::If" : [ "Create_io1", { "Ref": "NFSIops"}, { "Ref": "AWS::NoValue" } ] },
-        "Encrypted" : "true",
-        "AvailabilityZone" : { "Fn::GetAtt" : [ "NFSInstance", "AvailabilityZone" ] },
-        "Tags" : [ {
-          "Key" : "Name",
-          "Value" : "NFS_Vol"
-        } ]
-      },
-      "DeletionPolicy" : "Snapshot"
-    },
-    "VolMountPoint06" : {
-      "Type": "AWS::EC2::VolumeAttachment",
-      "Properties": {
-        "InstanceId": { "Ref": "NFSInstance" },
-        "VolumeId": { "Ref": "Volume06" },
-        "Device": "/dev/sdm"
-      }
-    },
-    "Volume07" : {
-      "Type" : "AWS::EC2::Volume",
-      "Properties" : {
-        "Size" : { "Ref" : "VolumeSize"},
-        "VolumeType" :  { "Ref" : "VolumeType" },
-        "Iops" : { "Fn::If" : [ "Create_io1", { "Ref": "NFSIops"}, { "Ref": "AWS::NoValue" } ] },
-        "Encrypted" : "true",
-        "AvailabilityZone" : { "Fn::GetAtt" : [ "NFSInstance", "AvailabilityZone" ] },
-        "Tags" : [ {
-          "Key" : "Name",
-          "Value" : "NFS_Vol"
-        } ]
-      },
-      "DeletionPolicy" : "Snapshot"
-    },
-    "VolMountPoint07" : {
-      "Type": "AWS::EC2::VolumeAttachment",
-      "Properties": {
-        "InstanceId": { "Ref": "NFSInstance" },
-        "VolumeId": { "Ref": "Volume07" },
-        "Device": "/dev/sdn"
-      }
-    },
-    "Volume08" : {
-      "Type" : "AWS::EC2::Volume",
-      "Properties" : {
-        "Size" : { "Ref" : "VolumeSize"},
-        "VolumeType" :  { "Ref" : "VolumeType" },
-        "Iops" : { "Fn::If" : [ "Create_io1", { "Ref": "NFSIops"}, { "Ref": "AWS::NoValue" } ] },
-        "Encrypted" : "true",
-        "AvailabilityZone" : { "Fn::GetAtt" : [ "NFSInstance", "AvailabilityZone" ] },
-        "Tags" : [ {
-          "Key" : "Name",
-          "Value" : "NFS_Vol"
-        } ]
-      },
-      "DeletionPolicy" : "Snapshot"
-    },
-    "VolMountPoint08" : {
-      "Type": "AWS::EC2::VolumeAttachment",
-      "Properties": {
-        "InstanceId": { "Ref": "NFSInstance" },
-        "VolumeId": { "Ref": "Volume08" },
-        "Device": "/dev/sdo"
-      }
-    },
-    "Volume09" : {
-      "Type" : "AWS::EC2::Volume",
-      "Properties" : {
-        "Size" : { "Ref" : "VolumeSize"},
-        "VolumeType" :  { "Ref" : "VolumeType" },
-        "Iops" : { "Fn::If" : [ "Create_io1", { "Ref": "NFSIops"}, { "Ref": "AWS::NoValue" } ] },
-        "Encrypted" : "true",
-        "AvailabilityZone" : { "Fn::GetAtt" : [ "NFSInstance", "AvailabilityZone" ] },
-        "Tags" : [ {
-          "Key" : "Name",
-          "Value" : "NFS_Vol"
-        } ]
-      },
-      "DeletionPolicy" : "Snapshot"
-    },
-    "VolMountPoint09" : {
-      "Type": "AWS::EC2::VolumeAttachment",
-      "Properties": {
-        "InstanceId": { "Ref": "NFSInstance" },
-        "VolumeId": { "Ref": "Volume09" },
-        "Device": "/dev/sdp"
-      }
-    },
-    "Volume10" : {
-      "Type" : "AWS::EC2::Volume",
-      "Properties" : {
-        "Size" : { "Ref" : "VolumeSize"},
-        "VolumeType" :  { "Ref" : "VolumeType" },
-        "Iops" : { "Fn::If" : [ "Create_io1", { "Ref": "NFSIops"}, { "Ref": "AWS::NoValue" } ] },
-        "Encrypted" : "true",
-        "AvailabilityZone" : { "Fn::GetAtt" : [ "NFSInstance", "AvailabilityZone" ] },
-        "Tags" : [ {
-          "Key" : "Name",
-          "Value" : "NFS_Vol"
-        } ]
-      },
-      "DeletionPolicy" : "Snapshot"
-    },
-    "VolMountPoint10" : {
-      "Type": "AWS::EC2::VolumeAttachment",
-      "Properties": {
-        "InstanceId": { "Ref": "NFSInstance" },
-        "VolumeId": { "Ref": "Volume10" },
-        "Device": "/dev/sdq"
-      }
-    }
-  },
-  "Parameters": {
-    "NFSInstanceType": {
-      "Description": "NFS instance type",
-      "Type": "String",
-      "Default": "m4.16xlarge",
-      "AllowedValues": [
-        "m4.16xlarge",
-        "m4.10xlarge",
-        "r4.16xlarge",
-        "c8.8xlarge"
-      ],
-      "ConstraintDescription": "Must an EC2 instance type from the list"
-    },
-    "OS" : {
-      "Description" : "Operating System (centos7, rhel7)",
-      "Type" : "String",
-      "Default" : "rhel7",
-      "ConstraintDescription" : "centos7, rhel7",
-      "AllowedValues" : [
-        "centos7",
-        "rhel7"
+        "true"
       ]
     },
-    "KeyName": {
-      "Description": "Existing EC2 KeyPair to enable SSH access to the instance.",
-      "Type": "AWS::EC2::KeyPair::KeyName"
-    },
-    "VPCId": {
-      "Type": "AWS::EC2::VPC::Id",
-      "Description": "VPC Id for this instance"
-    },
-    "Subnet": {
-      "Type": "AWS::EC2::Subnet::Id",
-      "Description": "Subnet for this instance"
-    },
-    "UsePublicIp" : {
-      "Description" : "Assign public IP address, access to the internet is needed for initial setup, either direct or through a NAT GW",
-      "Type" : "String",
-      "Default" : "False",
-      "ConstraintDescription" : "True/False",
-      "AllowedValues" : [
-        "True",
-        "False"
+    "create_elastic_ip": {
+      "Fn::Equals": [
+        {
+          "Ref": "CreateElasticIP"
+        },
+        "true"
       ]
     },
-    "ExistingSecurityGroup": {
-      "Description": "OPTIONAL: Existing Security Group, format sg-xxxxxxxx",
-      "Type": "String",
-      "Default": "",
-      "AllowedPattern" : "(|^sg-[0-9a-z]{8}$)"
-    },
-    "PlacementGroup" : {
-      "Description" : "OPTIONAL:  Existing placement group",
-      "Type" : "String"
-    },
-    "SSHLocation": {
-      "Description": "REQUIRED: The IP address range that can be used to access the instance using SSH.",
-      "Type": "String",
-      "MinLength": "9",
-      "MaxLength": "18",
-      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
-      "Default" : "10.0.0.0/16"
-    },
-    "BucketName": {
-      "Description": "OPTIONAL: specify s3 bucket for read (get/list) access only",
-      "Type": "String"
-    },
-    "VolumeSize": {
-      "Description": "Size (GB) of each of the EBS volumes, there will be 8 volumes created just for NFS",
-      "Type": "Number",
-      "Default": "100"
-    },
-    "VolumeType": {
-      "Description": "Type of volumes to create",
-      "Type": "String",
-      "Default": "gp2",
-      "ConstraintDescription": "Must be a either: gp2, io1",
-      "AllowedValues": [
-        "gp2",
-        "io1"
+    "no_placement_group": {
+      "Fn::Equals": [
+        {
+          "Ref": "ExistingPlacementGroup"
+        },
+        "NO_VALUE"
       ]
     },
-    "NFSIops": {
-      "Description": "Iops, only used with io1 volumes",
-      "Type": "String",
-      "Default": "1000"
+    "not_existing_sg": {
+      "Fn::Equals": [
+        {
+          "Ref": "ExistingSecurityGroup"
+        },
+        "NO_VALUE"
+      ]
     },
-    "ZfsPool": {
-      "Description": "ZFS pool name",
-      "Type": "String",
-      "Default": "v01"
-    },
-    "ZfsFSMountPoint": {
-      "Description": "ZFS mount point, absolute path will be /pool_name/mount_point (e.g. /v01/testzfs)",
-      "Type": "String",
-      "Default": "testzfs"
-    },
-    "NFSCidr": {
-      "Description": "CIDR for NFS Security Group and NFS clients, to allow all access use 0.0.0.0/0",
-      "Type": "String",
-      "MinLength": "9",
-      "MaxLength": "18",
-      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
-      "Default": "10.0.0.0/16"
-    },
-    "NFSOpts": {
-      "Description": "NFS export options",
-      "Type": "String",
-      "Default": "(rw,async,no_root_squash,wdelay,no_subtree_check,no_acl)"
-    },
-    "ZfsRAIDLevel" : {
-      "Description": "ZFS RAID Level, currently only 6 (8+2p) is supported",
-      "Type": "String",
-      "Default": "6",
-      "AllowedValues": [
-        "6"
-      ],
-      "ConstraintDescription": "Must be 0"
+    "vol_type_ebs": {
+      "Fn::Equals": [
+        {
+          "Ref": "VolumeType"
+        },
+        "EBS"
+      ]
     }
   },
-  "Conditions" : {
-    "Create_io1" : { "Fn::Equals": [ { "Ref": "VolumeType" }, "io1" ]},
-    "Has_Bucket" : { "Fn::Not": [ { "Fn::Equals": [ { "Ref" : "BucketName" } , "" ]}]},
-    "UseExistingSecurityGroup" : { "Fn::Not": [ { "Fn::Equals": [ { "Ref" : "ExistingSecurityGroup" } , "" ]}]},
-    "Has_Public_Ip": { "Fn::Equals": [ { "Ref": "UsePublicIp"}, "True" ]}
-  },
-  "Mappings" : {
+  "Description": "Currently supporting RHEL/CentOS 7.5.  Setup IAM role and security groups, launch instance, create/attach 10 EBS volumes, install/fix ZFS (http://download.zfsonlinux.org/epel/zfs-release.el7_5.noarch.rpm), create zfs RAID6 pool, setup NFS server, export NFS share",
+  "Mappings": {
     "AWSRegionAMI": {
       "ap-northeast-1": {
         "centos7": "ami-8e8847f1",
@@ -730,40 +119,840 @@
       }
     }
   },
-  "Outputs" : {
-    "InstanceID" : {
-      "Description": "Instance ID",
-      "Value" : { "Ref" : "NFSInstance" }
+  "Metadata": {
+    "AWS::CloudFormation::Interface": {
+      "ParameterGroups": [
+        {
+          "Label": {
+            "default": "Instance Configuration"
+          },
+          "Parameters": [
+            "OperatingSystem",
+            "VPCId",
+            "Subnet",
+            "UsePublicIp",
+            "CreateElasticIP",
+            "EC2KeyName",
+            "NFSInstanceType",
+            "SshAccessCidr",
+            "ExistingSecurityGroup",
+            "ExistingPlacementGroup",
+            "S3BucketName"
+          ]
+        },
+        {
+          "Label": {
+            "default": "Storage Options - Required"
+          },
+          "Parameters": [
+            "RAIDLevel",
+            "VolumeSize",
+            "VolumeType",
+            "EBSVolumeType",
+            "VolumeIops"
+          ]
+        },
+        {
+          "Label": {
+            "default": "ZFS Pool and FS Options - Required"
+          },
+          "Parameters": [
+            "ZfsPool",
+            "ZfsMountPoint"
+          ]
+        },
+        {
+          "Label": {
+            "default": "NFS Options - Required"
+          },
+          "Parameters": [
+            "NFSCidr",
+            "NFSOpts"
+          ]
+        }
+      ],
+      "ParameterLabels": {
+        "CreateElasticIP": {
+          "default": "Create and use an EIP "
+        },
+        "EBSVolumeType": {
+          "default": "Volume type of the EBS vol"
+        },
+        "EC2KeyName": {
+          "default": "EC2 Key Name"
+        },
+        "ExistingPlacementGroup": {
+          "default": "OPTIONAL:  Existing Placement Group"
+        },
+        "ExistingSecurityGroup": {
+          "default": "OPTIONAL:  Existing Security Group"
+        },
+        "NFSCidr": {
+          "default": "NFS CIDR block for mounts"
+        },
+        "NFSInstanceType": {
+          "default": "Instance Type"
+        },
+        "NFSOpts": {
+          "default": "NFS options"
+        },
+        "OperatingSystem": {
+          "default": "Operating System of AMI"
+        },
+        "RAIDLevel": {
+          "default": "RAID Level"
+        },
+        "S3BucketName": {
+          "default": "Optional S3 Bucket Name"
+        },
+        "SshAccessCidr": {
+          "default": "SSH Access CIDR Block"
+        },
+        "Subnet": {
+          "default": "Subnet ID"
+        },
+        "UsePublicIp": {
+          "default": "Assign a Public IP "
+        },
+        "VPCId": {
+          "default": "VPC ID"
+        },
+        "VolumeIops": {
+          "default": "IOPS for each EBS vol (only for io1)"
+        },
+        "VolumeSize": {
+          "default": "Volume size of the EBS vol"
+        },
+        "VolumeType": {
+          "default": "Volume type of the EBS vol"
+        },
+        "ZfsMountPoint": {
+          "default": "Mount Point"
+        },
+        "ZfsPool": {
+          "default": "ZFS pool name"
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "ElasticIP": {
+      "Condition": "create_elastic_ip",
+      "Description": "Elastic IP address for the instance",
+      "Value": {
+        "Ref": "EIPAddress"
+      }
     },
-    "InstancePrivateIP" : {
-      "Value" :  { "Fn::GetAtt" : [ "NFSInstance" , "PrivateIp" ]}
+    "ElasticPublicIP": {
+      "Condition": "create_elastic_ip",
+      "Value": {
+        "Fn::GetAtt": [
+          "NFSInstance",
+          "PublicIp"
+        ]
+      }
     },
-    "InstancePublicIP" : {
-      "Value" :  { "Fn::GetAtt" : [ "NFSInstance" , "PublicIp" ]},
-      "Condition" : "Has_Public_Ip"
-    },
-    "PrivateMountPoint" : {
-      "Description": "Mount point on private network",
-      "Value" : { "Fn::Join" :  [ "", [ { "Fn::GetAtt" : [ "NFSInstance" , "PrivateIp" ] } , ":/fs1"  ] ] }
-    },
-    "ExampleClientMountCommands" : {
+    "ExampleClientMountCommands": {
       "Description": "Example commands to mount NFS on the clients",
-      "Value" : { "Fn::Join" :  [ "", [ "sudo mkdir /nfs1; sudo mount " , { "Fn::GetAtt" : [ "NFSInstance" , "PrivateIp" ] } , ":/", { "Ref": "ZfsPool" }, "/", { "Ref": "ZfsFSMountPoint" },  " /nfs1"  ] ] }
+      "Value": {
+        "Fn::Join": [
+          "",
+          [
+            "sudo mkdir /nfs1; sudo mount ",
+            {
+              "Fn::GetAtt": [
+                "NFSInstance",
+                "PrivateIp"
+              ]
+            },
+            ":/",
+            {
+              "Ref": "ZfsPool"
+            },
+            "/",
+            {
+              "Ref": "ZfsMountPoint"
+            },
+            " /nfs1"
+          ]
+        ]
+      }
     },
-    "BucketName" : {
-      "Value" : { "Ref" : "BucketName" },
-      "Condition" :  "Has_Bucket"
+    "InstanceID": {
+      "Description": "Instance ID",
+      "Value": {
+        "Ref": "NFSInstance"
+      }
     },
-    "Volume01" : { "Value" : { "Ref" : "Volume01" } },
-    "Volume02" : { "Value" : { "Ref" : "Volume02" } },
-    "Volume03" : { "Value" : { "Ref" : "Volume03" } },
-    "Volume04" : { "Value" : { "Ref" : "Volume04" } },
-    "Volume05" : { "Value" : { "Ref" : "Volume05" } },
-    "Volume06" : { "Value" : { "Ref" : "Volume06" } },
-    "Volume07" : { "Value" : { "Ref" : "Volume07" } },
-    "Volume08" : { "Value" : { "Ref" : "Volume08" } },
-    "Volume09" : { "Value" : { "Ref" : "Volume09" } },
-    "Volume10" : { "Value" : { "Ref" : "Volume10" } }
+    "InstancePrivateIP": {
+      "Value": {
+        "Fn::GetAtt": [
+          "NFSInstance",
+          "PrivateIp"
+        ]
+      }
+    },
+    "InstancePublicIP": {
+      "Condition": "Has_Public_Ip",
+      "Value": {
+        "Fn::GetAtt": [
+          "NFSInstance",
+          "PublicIp"
+        ]
+      }
+    },
+    "PrivateMountPoint": {
+      "Description": "Mount point on private network",
+      "Value": {
+        "Fn::Join": [
+          "",
+          [
+            {
+              "Fn::GetAtt": [
+                "NFSInstance",
+                "PrivateIp"
+              ]
+            },
+            ":/fs1"
+          ]
+        ]
+      }
+    },
+    "S3BucketName": {
+      "Condition": "Has_Bucket",
+      "Value": {
+        "Ref": "S3BucketName"
+      }
+    }
+  },
+  "Parameters": {
+    "CreateElasticIP": {
+      "AllowedValues": [
+        "true",
+        "false"
+      ],
+      "ConstraintDescription": "true/false",
+      "Default": "true",
+      "Description": "Create an Elasic IP address, that will be assinged to an instance",
+      "Type": "String"
+    },
+    "EBSVolumeType": {
+      "AllowedValues": [
+        "io1",
+        "gp2",
+        "st1"
+      ],
+      "ConstraintDescription": "Must be a either: io1, gp2, st1",
+      "Default": "io1",
+      "Description": "Type of EBS volumes to create",
+      "Type": "String"
+    },
+    "EC2KeyName": {
+      "ConstraintDescription": "REQUIRED: Must be a valud EC2 key pair",
+      "Description": "Name of an existing EC2 KeyPair to enable SSH access to the instance.",
+      "Type": "AWS::EC2::KeyPair::KeyName"
+    },
+    "ExistingPlacementGroup": {
+      "Default": "NO_VALUE",
+      "Description": "OPTIONAL:  Existing placement group",
+      "Type": "String"
+    },
+    "ExistingSecurityGroup": {
+      "Default": "NO_VALUE",
+      "Description": "OPTIONAL: Choose an existing Security Group ID, e.g. sg-abcd1234",
+      "Type": "String"
+    },
+    "NFSCidr": {
+      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+      "ConstraintDescription": "Must be a valid CIDR x.x.x.x/x",
+      "Default": "10.0.0.0/16",
+      "Description": "CIDR for NFS Security Group and NFS clients, to allow all access use 0.0.0.0/0",
+      "Type": "String"
+    },
+    "NFSInstanceType": {
+      "AllowedValues": [
+        "m4.16xlarge",
+        "m4.10xlarge",
+        "r4.16xlarge",
+        "c8.8xlarge"
+      ],
+      "ConstraintDescription": "Must an EC2 instance type from the list",
+      "Default": "r4.16xlarge",
+      "Description": "NFS instance type",
+      "Type": "String"
+    },
+    "NFSOpts": {
+      "Default": "(rw,async,no_root_squash,wdelay,no_subtree_check,no_acl)",
+      "Description": "NFS export options",
+      "Type": "String"
+    },
+    "OperatingSystem": {
+      "AllowedValues": [
+        "alinux2",
+        "centos7",
+        "rhel7"
+      ],
+      "ConstraintDescription": "Must be: alinux2, centos7, rhel7",
+      "Default": "centos7",
+      "Description": "Operating System",
+      "Type": "String"
+    },
+    "RAIDLevel": {
+      "AllowedValues": [
+        "0"
+      ],
+      "ConstraintDescription": "Must be 0",
+      "Default": "0",
+      "Description": "RAID Level, currently only 6 (8+2p) is supported",
+      "Type": "String"
+    },
+    "S3BucketName": {
+      "Default": "NO_VALUE",
+      "Description": "S3 bucket to allow this instance read access.",
+      "Type": "String"
+    },
+    "SshAccessCidr": {
+      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+      "ConstraintDescription": "Must be a valid CIDR x.x.x.x/x",
+      "Default": "111.222.333.444/32",
+      "Description": "CIDR Block for SSH access",
+      "Type": "String"
+    },
+    "Subnet": {
+      "Description": "Subnet IDs",
+      "Type": "AWS::EC2::Subnet::Id"
+    },
+    "UsePublicIp": {
+      "AllowedValues": [
+        "true",
+        "false"
+      ],
+      "ConstraintDescription": "true/talse",
+      "Default": "true",
+      "Description": "Should a public IP address be given to the instance",
+      "Type": "String"
+    },
+    "VPCId": {
+      "Description": "VPC Id for this instance",
+      "Type": "AWS::EC2::VPC::Id"
+    },
+    "VolumeIops": {
+      "Default": "20000",
+      "Description": "IOPS for the EBS volume",
+      "Type": "Number"
+    },
+    "VolumeSize": {
+      "Default": "500",
+      "Description": "Volume size in GB",
+      "Type": "Number"
+    },
+    "VolumeType": {
+      "AllowedValues": [
+        "EBS",
+        "InstanceStore"
+      ],
+      "ConstraintDescription": "Volume type has to EBS or InstanceStore",
+      "Default": "EBS",
+      "Description": "Type of EBS volume",
+      "Type": "String"
+    },
+    "ZfsMountPoint": {
+      "Default": "testzfs",
+      "Description": "ZFS mount point, absolute path will be /pool_name/mount_point (e.g. /v01/testzfs)",
+      "Type": "String"
+    },
+    "ZfsPool": {
+      "Default": "v01",
+      "Description": "ZFS pool name",
+      "Type": "String"
+    }
+  },
+  "Resources": {
+    "EIPAddress": {
+      "Condition": "create_elastic_ip",
+      "Properties": {
+        "Domain": "vpc"
+      },
+      "Type": "AWS::EC2::EIP"
+    },
+    "NFSInstance": {
+      "Properties": {
+        "BlockDeviceMappings": {
+          "Fn::If": [
+            "vol_type_ebs",
+            [
+              {
+                "DeviceName": "/dev/sdh",
+                "Ebs": {
+                  "DeleteOnTermination": "true",
+                  "Iops": {
+                    "Ref": "VolumeIops"
+                  },
+                  "VolumeSize": {
+                    "Ref": "VolumeSize"
+                  },
+                  "VolumeType": {
+                    "Ref": "EBSVolumeType"
+                  }
+                }
+              },
+              {
+                "DeviceName": "/dev/sdi",
+                "Ebs": {
+                  "DeleteOnTermination": "true",
+                  "Iops": {
+                    "Ref": "VolumeIops"
+                  },
+                  "VolumeSize": {
+                    "Ref": "VolumeSize"
+                  },
+                  "VolumeType": {
+                    "Ref": "EBSVolumeType"
+                  }
+                }
+              },
+              {
+                "DeviceName": "/dev/sdj",
+                "Ebs": {
+                  "DeleteOnTermination": "true",
+                  "Iops": {
+                    "Ref": "VolumeIops"
+                  },
+                  "VolumeSize": {
+                    "Ref": "VolumeSize"
+                  },
+                  "VolumeType": {
+                    "Ref": "EBSVolumeType"
+                  }
+                }
+              },
+              {
+                "DeviceName": "/dev/sdk",
+                "Ebs": {
+                  "DeleteOnTermination": "true",
+                  "Iops": {
+                    "Ref": "VolumeIops"
+                  },
+                  "VolumeSize": {
+                    "Ref": "VolumeSize"
+                  },
+                  "VolumeType": {
+                    "Ref": "EBSVolumeType"
+                  }
+                }
+              },
+              {
+                "DeviceName": "/dev/sdl",
+                "Ebs": {
+                  "DeleteOnTermination": "true",
+                  "Iops": {
+                    "Ref": "VolumeIops"
+                  },
+                  "VolumeSize": {
+                    "Ref": "VolumeSize"
+                  },
+                  "VolumeType": {
+                    "Ref": "EBSVolumeType"
+                  }
+                }
+              },
+              {
+                "DeviceName": "/dev/sdm",
+                "Ebs": {
+                  "DeleteOnTermination": "true",
+                  "Iops": {
+                    "Ref": "VolumeIops"
+                  },
+                  "VolumeSize": {
+                    "Ref": "VolumeSize"
+                  },
+                  "VolumeType": {
+                    "Ref": "EBSVolumeType"
+                  }
+                }
+              }
+            ],
+            {
+              "Ref": "AWS::NoValue"
+            }
+          ]
+        },
+        "IamInstanceProfile": {
+          "Ref": "RootInstanceProfile"
+        },
+        "ImageId": {
+          "Fn::FindInMap": [
+            "AWSRegionAMI",
+            {
+              "Ref": "AWS::Region"
+            },
+            {
+              "Ref": "OperatingSystem"
+            }
+          ]
+        },
+        "InstanceType": {
+          "Ref": "NFSInstanceType"
+        },
+        "KeyName": {
+          "Ref": "EC2KeyName"
+        },
+        "NetworkInterfaces": [
+          {
+            "AssociatePublicIpAddress": {
+              "Ref": "UsePublicIp"
+            },
+            "DeleteOnTermination": "true",
+            "DeviceIndex": "0",
+            "GroupSet": {
+              "Fn::If": [
+                "not_existing_sg",
+                [
+                  {
+                    "Ref": "NFSSecurityGroup"
+                  },
+                  {
+                    "Ref": "SshSecurityGroup"
+                  }
+                ],
+                [
+                  {
+                    "Ref": "NFSSecurityGroup"
+                  },
+                  {
+                    "Ref": "SshSecurityGroup"
+                  },
+                  {
+                    "Ref": "ExistingSecurityGroup"
+                  }
+                ]
+              ]
+            },
+            "SubnetId": {
+              "Ref": "Subnet"
+            }
+          }
+        ],
+        "PlacementGroupName": {
+          "Fn::If": [
+            "no_placement_group",
+            {
+              "Ref": "AWS::NoValue"
+            },
+            {
+              "Ref": "ExistingPlacementGroup"
+            }
+          ]
+        },
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "",
+              [
+                "#!/usr/bin/env bash\n",
+                "\n",
+                "set -x\n",
+                "\n",
+                "##exit 0\n",
+                "\n",
+                "zfs_pool_name=\"",
+                {
+                  "Ref": "ZfsPool"
+                },
+                "\"\n",
+                "zfs_mount_point=\"",
+                {
+                  "Ref": "ZfsMountPoint"
+                },
+                "\"\n",
+                "nfs_cidr_block=\"",
+                {
+                  "Ref": "NFSCidr"
+                },
+                "\"\n",
+                "nfs_opts=\"",
+                {
+                  "Ref": "NFSOpts"
+                },
+                "\"\n",
+                "my_wait_handle=\"",
+                {
+                  "Ref": "NFSInstanceWaitHandle"
+                },
+                "\"\n",
+                "\n",
+                "#@IgnoreInspection BashAddShebang\n",
+                "\n",
+                "#\n",
+                "# Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.\n",
+                "#\n",
+                "# Licensed under the Apache License, Version 2.0 (the \"License\"). You may not use this file\n",
+                "# except in compliance with the License. A copy of the License is located at\n",
+                "#\n",
+                "#     http://aws.amazon.com/apache2.0/\n",
+                "#\n",
+                "# or in the \"license\" file accompanying this file. This file is distributed on an \"AS IS\"\n",
+                "# BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the\n",
+                "# License for the specific language governing permissions and limitations under the License.\n",
+                "#\n",
+                "\n",
+                "\n",
+                "function fix_zfs_repo {\n",
+                "  echo \"Fixing ZFS repo...\"\n",
+                "  sudo cat /etc/yum.repos.d/zfs.repo  | while read l\n",
+                "  do\n",
+                "    if [ \"$l\" == \"[zfs]\" ]; then\n",
+                "      let on_zfs=1\n",
+                "    elif [ \"$l\" == \"[zfs-kmod]\" ]; then\n",
+                "      let on_zfs_kmod=1\n",
+                "    fi\n",
+                "    if [[ \"$on_zfs\" -eq 1 ]] && [[ \"$l\" == \"enabled=1\" ]]; then\n",
+                "      l=\"enabled=0\"\n",
+                "      let on_zfs=0\n",
+                "    elif [[ \"$on_zfs_kmod\" -eq 1 ]] &&  [[ \"$l\" == \"enabled=0\" ]]; then\n",
+                "      l=\"enabled=1\"\n",
+                "      let on_zfs_kmod=0\n",
+                "    fi\n",
+                "    echo $l\n",
+                "  done > /tmp/new_zfs.repo\n",
+                "  sudo cp /etc/yum.repos.d/zfs.repo /etc/yum.repos.d/zfs.repo.dist\n",
+                "  sudo mv /tmp/new_zfs.repo /etc/yum.repos.d/zfs.repo\n",
+                "  echo \"Done fixing ZFS repo\"\n",
+                "\n",
+                "}\n",
+                "\n",
+                "function zfs_install {\n",
+                "  echo -n \"Fixing and Re-Installing ZFS...\"\n",
+                "  known_zfs_key=\"C93AFFFD9F3F7B03C310CEB6A9D5A1C0F14AB620\"\n",
+                "  sudo yum -y remove zfs zfs-kmod spl spl-kmod libzfs2 libnvpair1 libuutil1 libzpool2 zfs-release\n",
+                "  sudo yum -y install http://download.zfsonlinux.org/epel/zfs-release.el7_5.noarch.rpm\n",
+                "  actual_zfs_key=$(gpg --quiet --with-fingerprint /etc/pki/rpm-gpg/RPM-GPG-KEY-zfsonlinux | grep \"Key fingerprint\" | cut -d\"=\" -f2 | tr -d ' ')\n",
+                "  echo \"Checking keys...\"\n",
+                "  if [[ \"$known_zfs_key\" != \"$actual_zfs_key\" ]]; then\n",
+                "    echo \"ERROR: ZFS installation keys not valid!!!\"\n",
+                "    echo \"Exiting...\"\n",
+                "    exit\n",
+                "  fi\n",
+                "  fix_zfs_repo\n",
+                "  sudo yum -y autoremove\n",
+                "  sudo yum -y clean metadata\n",
+                "  sudo yum -y install zfs\n",
+                "  echo \"Done installing ZFS\"\n",
+                "}\n",
+                "\n",
+                "function zfs_create {\n",
+                "  sudo /sbin/modprobe zfs\n",
+                "  modinfo zfs\n",
+                "  sudo zpool create -O compression=lz4 -O atime=off -O sync=disabled -f ${zfs_pool_name} -o ashift=12 xvdh xvdi xvdj xvdk xvdl xvdm\n",
+                "  sudo zpool status -v\n",
+                "  sudo zfs create ${zfs_pool_name}/${zfs_mount_point}\n",
+                "}\n",
+                "\n",
+                "function zfs_startup {\n",
+                "  sudo systemctl enable zfs-import-cache\n",
+                "  sudo systemctl enable zfs-mount.service\n",
+                "  sudo systemctl enable zfs.target\n",
+                "}\n",
+                "\n",
+                "dev_count=0\n",
+                "function ck_devs {\n",
+                "  devs_ready=0\n",
+                "  for l in {h..m}; do\n",
+                "    if [[ ! -b /dev/xvd${l} ]]; then\n",
+                "      devs_ready=0\n",
+                "      ((dev_count = $dev_count + 1))\n",
+                "      if [[ $dev_count -gt 30 ]]; then\n",
+                "        echo \"Devices not ready, exiting...\"\n",
+                "        exit\n",
+                "      else\n",
+                "        sleep 10\n",
+                "        ck_devs\n",
+                "      fi\n",
+                "    else\n",
+                "      devs_ready=1\n",
+                "    fi\n",
+                "  done\n",
+                "  echo \"Devices ready.\"\n",
+                "}\n",
+                "\n",
+                "function nfs_server_settings {\n",
+                "  sudo su -c 'echo -e \"STATD_PORT=\\\"32765\\\"\\nSTATD_OUTGOING_PORT=\\\"32766\\\"\\nSTATDARG=\\\"-p 32765 -o 32766\\\"\\nMOUNTD_PORT=\\\"32767\\\"\\nRPCMOUNTDOPTS=\\\"-p 32767\\\"\n",
+                "LOCKD_UDPPORT=\\\"32768\\\"\\nLOCKD_TCPPORT=\\\"32768\\\"\\nRQUOTAD_PORT=\\\"32769\\\"\\nRQUOTAD=\\\"no\\\"\\nRPCNFSDCOUNT=\\\"128\\\"\"' > /etc/sysconfig/nfs\n",
+                "}\n",
+                "\n",
+                "function nfs_config {\n",
+                "  nfs_server_settings\n",
+                "  sudo su -c 'echo \"'\"${zfs_pool_name}/${zfs_mount_point} ${nfs_cidr_block}${nfs_opts}\"'\" > /etc/exports'\n",
+                "  sudo systemctl enable rpcbind\n",
+                "  sudo systemctl enable nfs-server\n",
+                "  sudo systemctl start rpcbind\n",
+                "  sudo systemctl start nfs-server\n",
+                "  sudo systemctl start rpc-statd\n",
+                "  showmount -e localhost\n",
+                "}\n",
+                "\n",
+                "function inst_updates {\n",
+                "  echo \"Installing updates\"\n",
+                "  sudo yum install nfs-utils rpcbind -y\n",
+                "  sudo yum install -y vim\n",
+                "  sudo yum update -y\n",
+                "  echo \"Updates complete\"\n",
+                "}\n",
+                "\n",
+                "function ck_status {\n",
+                "  zfs_status=$(sudo zpool status | grep state | awk {'print $2'})\n",
+                "  sudo mount | grep ${zfs_pool_name}\n",
+                "  let zfs_mount_rc=$?\n",
+                "  sudo showmount -e localhost | grep -v Export | grep ${zfs_mount_point}\n",
+                "  let nfs_status_rc=$?\n",
+                "  if [[ \"$zfs_status\" == \"ONLINE\" ]] && [[ \"$nfs_status_rc\" -eq 0 ]] && [[ \"$zfs_mount_rc\" -eq 0 ]]; then\n",
+                "    echo \"ZFS and NFS installed and configured\"\n",
+                "    curl -X PUT -H 'Content-Type:' --data-binary '{ \"Status\" : \"SUCCESS\",  \"Reason\" : \"ZFS and NFS installed and configured\",  \"UniqueId\" : \"ZFS001\",  \"Data\" : \"ZFS and NFS installed and configured.\"}'  \"${my_wait_handle}\"\n",
+                "  fi\n",
+                "}\n",
+                "\n",
+                "while [[ ! $devs_ready ]]; do\n",
+                "  ck_devs\n",
+                "done\n",
+                "inst_updates\n",
+                "zfs_install\n",
+                "zfs_create\n",
+                "zfs_startup\n",
+                "nfs_config\n",
+                "ck_status\n",
+                "\n",
+                "\n"
+              ]
+            ]
+          }
+        }
+      },
+      "Type": "AWS::EC2::Instance"
+    },
+    "NFSInstanceWaitCondition": {
+      "DependsOn": "NFSInstance",
+      "Properties": {
+        "Handle": {
+          "Ref": "NFSInstanceWaitHandle"
+        },
+        "Timeout": "1500"
+      },
+      "Type": "AWS::CloudFormation::WaitCondition"
+    },
+    "NFSInstanceWaitHandle": {
+      "Type": "AWS::CloudFormation::WaitConditionHandle"
+    },
+    "NFSSecurityGroup": {
+      "Properties": {
+        "GroupDescription": "NFS Secuirty group",
+        "SecurityGroupIngress": [
+          {
+            "CidrIp": {
+              "Ref": "NFSCidr"
+            },
+            "FromPort": "2049",
+            "IpProtocol": "tcp",
+            "ToPort": "2049"
+          }
+        ],
+        "VpcId": {
+          "Ref": "VPCId"
+        }
+      },
+      "Type": "AWS::EC2::SecurityGroup"
+    },
+    "RootInstanceProfile": {
+      "Properties": {
+        "Roles": [
+          {
+            "Ref": "RootRole"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::InstanceProfile"
+    },
+    "RootRole": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "sts:AssumeRole"
+              ],
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "ec2.amazonaws.com"
+                ]
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyDocument": {
+              "Statement": [
+                {
+                  "Action": [
+                    "s3:GetObject"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": {
+                    "Fn::Join": [
+                      "",
+                      [
+                        "arn:aws:s3:::",
+                        {
+                          "Ref": "S3BucketName"
+                        },
+                        "/*"
+                      ]
+                    ]
+                  }
+                },
+                {
+                  "Action": [
+                    "s3:ListBucket"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": {
+                    "Fn::Join": [
+                      "",
+                      [
+                        "arn:aws:s3:::",
+                        {
+                          "Ref": "S3BucketName"
+                        }
+                      ]
+                    ]
+                  }
+                }
+              ]
+            },
+            "PolicyName": "s3bucketaccess"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "SshSecurityGroup": {
+      "Properties": {
+        "GroupDescription": "SSH Secuirty group",
+        "SecurityGroupIngress": [
+          {
+            "CidrIp": {
+              "Ref": "SshAccessCidr"
+            },
+            "FromPort": "22",
+            "IpProtocol": "tcp",
+            "ToPort": "22"
+          }
+        ],
+        "VpcId": {
+          "Ref": "VPCId"
+        }
+      },
+      "Type": "AWS::EC2::SecurityGroup"
+    }
   }
 }
-

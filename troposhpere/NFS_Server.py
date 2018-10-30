@@ -52,8 +52,6 @@ def main():
         "create zfs RAID6 pool, setup NFS server, export NFS share"
     )
 
-
-
     InstUserData = list()
     InstUserData = [
         '#!/usr/bin/env bash\n',
@@ -75,7 +73,6 @@ def main():
 
     for l in user_data_file:
         InstUserData.append(l)
-
 
     t.add_metadata({
         'AWS::CloudFormation::Interface': {
@@ -252,6 +249,7 @@ def main():
     ExistingPlacementGroup = t.add_parameter(Parameter(
         'ExistingPlacementGroup',
         Type="String",
+        Default="NO_VALUE",
         Description="OPTIONAL:  Existing placement group"
     ))
 
@@ -263,7 +261,8 @@ def main():
 
     ExistingSecurityGroup = t.add_parameter(Parameter(
         'ExistingSecurityGroup',
-        Type="AWS::EC2::SecurityGroup::Id",
+        Type="String",
+        Default="NO_VALUE",
         Description="OPTIONAL: Choose an existing Security Group ID, e.g. sg-abcd1234"
     ))
 
@@ -294,14 +293,15 @@ def main():
     S3BucketName = t.add_parameter(Parameter(
         'S3BucketName',
         Type="String",
+        Default="NO_VALUE",
         Description="S3 bucket to allow this instance read access."
     ))
 
     SshAccessCidr = t.add_parameter(Parameter(
         'SshAccessCidr',
         Type="String",
-        Description="CIDR Block for SSH access, default 0.0.0.0/0",
-        Default="0.0.0.0/0",
+        Description="CIDR Block for SSH access",
+        Default="111.222.333.444/32",
         AllowedPattern="(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
         ConstraintDescription="Must be a valid CIDR x.x.x.x/x"
     ))
@@ -321,13 +321,6 @@ def main():
         Type="String",
         Default="(rw,async,no_root_squash,wdelay,no_subtree_check,no_acl)"
     ))
-
-    VarLogMessagesFile = t.add_parameter(Parameter(
-        'VarLogMessagesFile',
-        Type="String",
-        Description="S3 bucket and file name for log CloudWatch config (e.g. s3://jouser-logs/var-log-message.config)"
-    ))
-
 
     RootRole = t.add_resource(iam.Role(
         "RootRole",
@@ -417,7 +410,11 @@ def main():
                 DeleteOnTermination='true',
                 SubnetId=Ref(Subnet))],
         IamInstanceProfile=(Ref(RootInstanceProfile)),
-        PlacementGroupName=(Ref(ExistingPlacementGroup)),
+        PlacementGroupName=If(
+            "no_placement_group",
+            Ref("AWS::NoValue"),
+            Ref(ExistingPlacementGroup)
+        ),
         BlockDeviceMappings=If('vol_type_ebs',
                                [
                                    ec2.BlockDeviceMapping(
@@ -545,8 +542,13 @@ def main():
     })
 
     t.add_condition(
+        "no_placement_group",
+        Equals(Ref(ExistingPlacementGroup), "NO_VALUE")
+    )
+
+    t.add_condition(
         "not_existing_sg",
-        Equals(Ref(ExistingSecurityGroup), "")
+        Equals(Ref(ExistingSecurityGroup), "NO_VALUE")
     )
 
     t.add_condition(
@@ -556,17 +558,17 @@ def main():
 
     t.add_condition(
         "Has_Public_Ip",
-        Equals(Ref(UsePublicIp), "True")
+        Equals(Ref(UsePublicIp), "true")
     )
 
     t.add_condition(
         "Has_Bucket",
-        Not(Equals(Ref(S3BucketName), ""))
+        Not(Equals(Ref(S3BucketName), "NO_VALUE"))
     )
 
     t.add_condition(
         "create_elastic_ip",
-        Equals(Ref(CreateElasticIP), "True")
+        Equals(Ref(CreateElasticIP), "true")
     )
 
     nfswaithandle = t.add_resource(WaitConditionHandle('NFSInstanceWaitHandle'))
