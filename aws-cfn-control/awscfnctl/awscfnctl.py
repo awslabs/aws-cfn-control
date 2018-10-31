@@ -484,7 +484,7 @@ class CfnControl:
 
         for section_name in parser.sections():
             for key, value in parser.items(section_name):
-                # print('key: {0}'.format(key))
+                #print('key: {0}'.format(key))
                 if key in boolean_keys:
                     value = parser.getboolean(section_name, key)
 

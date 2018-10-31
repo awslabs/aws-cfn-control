@@ -18,7 +18,7 @@
         {
           "Ref": "UsePublicIp"
         },
-        "true"
+        "True"
       ]
     },
     "create_elastic_ip": {
@@ -26,7 +26,7 @@
         {
           "Ref": "CreateElasticIP"
         },
-        "true"
+        "True"
       ]
     },
     "no_placement_group": {
@@ -328,11 +328,11 @@
   "Parameters": {
     "CreateElasticIP": {
       "AllowedValues": [
-        "true",
-        "false"
+        "True",
+        "False"
       ],
-      "ConstraintDescription": "true/false",
-      "Default": "true",
+      "ConstraintDescription": "True/False",
+      "Default": "True",
       "Description": "Create an Elasic IP address, that will be assinged to an instance",
       "Type": "String"
     },
@@ -424,11 +424,11 @@
     },
     "UsePublicIp": {
       "AllowedValues": [
-        "true",
-        "false"
+        "True",
+        "False"
       ],
-      "ConstraintDescription": "true/talse",
-      "Default": "true",
+      "ConstraintDescription": "True/False",
+      "Default": "True",
       "Description": "Should a public IP address be given to the instance",
       "Type": "String"
     },

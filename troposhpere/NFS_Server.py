@@ -270,11 +270,11 @@ def main():
         'UsePublicIp',
         Type="String",
         Description="Should a public IP address be given to the instance",
-        Default="true",
-        ConstraintDescription="true/talse",
+        Default="True",
+        ConstraintDescription="True/False",
         AllowedValues=[
-            "true",
-            "false"
+            "True",
+            "False"
         ]
     ))
 
@@ -282,11 +282,11 @@ def main():
         'CreateElasticIP',
         Type="String",
         Description="Create an Elasic IP address, that will be assinged to an instance",
-        Default="true",
-        ConstraintDescription="true/false",
+        Default="True",
+        ConstraintDescription="True/False",
         AllowedValues=[
-            "true",
-            "false"
+            "True",
+            "False"
         ]
     ))
 
@@ -561,7 +561,7 @@ def main():
 
     t.add_condition(
         "Has_Public_Ip",
-        Equals(Ref(UsePublicIp), "true")
+        Equals(Ref(UsePublicIp), "True")
     )
 
     t.add_condition(
@@ -571,7 +571,7 @@ def main():
 
     t.add_condition(
         "create_elastic_ip",
-        Equals(Ref(CreateElasticIP), "true")
+        Equals(Ref(CreateElasticIP), "True")
     )
 
     nfswaithandle = t.add_resource(WaitConditionHandle('NFSInstanceWaitHandle'))
