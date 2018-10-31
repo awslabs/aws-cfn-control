@@ -330,27 +330,30 @@ def main():
                 "Service": [ "ec2.amazonaws.com" ]
             },
             "Action": [ "sts:AssumeRole" ]
-        }]},
-        Policies=[
-            iam.Policy(
-                PolicyName="s3bucketaccess",
-                PolicyDocument={
-                    "Statement": [
-                        {
-                            "Effect": "Allow",
-                            "Action": ["s3:GetObject"],
-                            "Resource": {"Fn::Join":["", ["arn:aws:s3:::", {"Ref": "S3BucketName"},"/*"]]}
-                        },
-                        {
-                            "Effect": "Allow",
-                            "Action": [ "s3:ListBucket"],
-                            "Resource": {"Fn::Join":["", ["arn:aws:s3:::", {"Ref": "S3BucketName"}]]}
-                        }],
-                }
-            ),
-
-        ]
+        }]}
     ))
+
+    BucketPolicy= t.add_resource(PolicyType(
+        "BucketPolicy",
+        PolicyName="BucketPolicy",
+        Roles=[Ref(RootRole)],
+        PolicyDocument={
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Action": ["s3:GetObject"],
+                    "Resource": {"Fn::Join":["", ["arn:aws:s3:::", {"Ref": "S3BucketName"},"/*"]]}
+                },
+                {
+                    "Effect": "Allow",
+                    "Action": [ "s3:ListBucket"],
+                    "Resource": {"Fn::Join":["", ["arn:aws:s3:::", {"Ref": "S3BucketName"}]]}
+                }
+            ],
+        },
+        Condition="Has_Bucket"
+    )),
 
     NFSSecurityGroup = t.add_resource(SecurityGroup(
         "NFSSecurityGroup",
