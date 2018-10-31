@@ -83,6 +83,7 @@ def main():
                         "OperatingSystem",
                         "VPCId",
                         "Subnet",
+                        "PrivateIpAddress",
                         "UsePublicIp",
                         "CreateElasticIP",
                         "EC2KeyName",
@@ -122,6 +123,7 @@ def main():
                 'OperatingSystem': {'default': 'Operating System of AMI'},
                 'VPCId': {'default': 'VPC ID'},
                 'Subnet': {'default': 'Subnet ID'},
+                "PrivateIpAddress": {'default': 'Static Private IP'},
                 'UsePublicIp': {'default': 'Assign a Public IP '},
                 'CreateElasticIP': {'default': 'Create and use an EIP '},
                 'EC2KeyName': {'default': 'EC2 Key Name'},
@@ -257,6 +259,13 @@ def main():
         'Subnet',
         Type="AWS::EC2::Subnet::Id",
         Description="Subnet IDs"
+    ))
+
+    StaticPrivateIpAddress = t.add_parameter(Parameter(
+        'StaticPrivateIpAddress',
+        Type="String",
+        Default="NO_VALUE",
+        Description="Static Private IP address",
     ))
 
     ExistingSecurityGroup = t.add_parameter(Parameter(
@@ -403,6 +412,7 @@ def main():
         InstanceType=(Ref(NFSInstanceType)),
         NetworkInterfaces=[
             NetworkInterfaceProperty(
+                SubnetId=Ref(Subnet),
                 GroupSet=If(
                     "not_existing_sg",
                     [Ref(NFSSecurityGroup), Ref(SshSecurityGroup)],
@@ -411,7 +421,13 @@ def main():
                 AssociatePublicIpAddress=Ref(UsePublicIp),
                 DeviceIndex='0',
                 DeleteOnTermination='true',
-                SubnetId=Ref(Subnet))],
+                PrivateIpAddress=If(
+                    "Has_Static_Private_IP",
+                    Ref(StaticPrivateIpAddress),
+                    Ref("AWS::NoValue"),
+                )
+            )
+        ],
         IamInstanceProfile=(Ref(RootInstanceProfile)),
         PlacementGroupName=If(
             "no_placement_group",
@@ -574,6 +590,11 @@ def main():
         Equals(Ref(CreateElasticIP), "True")
     )
 
+    t.add_condition(
+        "Has_Static_Private_IP",
+        Not(Equals(Ref(StaticPrivateIpAddress), "NO_VALUE"))
+    )
+
     nfswaithandle = t.add_resource(WaitConditionHandle('NFSInstanceWaitHandle'))
 
     nfswaitcondition = t.add_resource(WaitCondition(
@@ -589,41 +610,26 @@ def main():
             Description="Elastic IP address for the instance",
             Value=Ref(EIPAddress),
             Condition="create_elastic_ip"
-        )
-    ])
-
-    t.add_output([
+        ),
         Output(
             "InstanceID",
             Description="Instance ID",
             Value=Ref(NFSInstance)
-        )
-    ])
-
-    t.add_output([
+        ),
         Output(
             "InstancePrivateIP",
             Value=GetAtt('NFSInstance', 'PrivateIp')
-        )
-    ])
-
-    t.add_output([
+        ),
         Output(
             "InstancePublicIP",
             Value=GetAtt('NFSInstance', 'PublicIp'),
             Condition="Has_Public_Ip"
-        )
-    ])
-
-    t.add_output([
+        ),
         Output(
             "ElasticPublicIP",
             Value=GetAtt('NFSInstance', 'PublicIp'),
             Condition="create_elastic_ip"
-        )
-    ])
-
-    t.add_output([
+        ),
         Output(
             "PrivateMountPoint",
             Description="Mount point on private network",
@@ -631,10 +637,7 @@ def main():
                 GetAtt('NFSInstance', 'PrivateIp'),
                 ":/fs1"
             ] )
-        )
-    ])
-
-    t.add_output([
+        ),
         Output(
             "ExampleClientMountCommands",
             Description="Example commands to mount NFS on the clients",
@@ -647,28 +650,18 @@ def main():
                 Ref("ZfsMountPoint"),
                 " /nfs1"
             ])
-        )
-    ])
-
-    t.add_output([
+        ),
         Output(
             "S3BucketName",
             Value=(Ref("S3BucketName")),
             Condition="Has_Bucket"
+        ),
+        Output(
+            "StaticPrivateIpAddress",
+            Value=(Ref("StaticPrivateIpAddress")),
+            Condition="Has_Static_Private_IP"
         )
     ])
-
-    
-    #    "Volume01" : { "Value" : { "Ref" : "Volume01" } },
-    #    "Volume02" : { "Value" : { "Ref" : "Volume02" } },
-    #    "Volume03" : { "Value" : { "Ref" : "Volume03" } },
-    #    "Volume04" : { "Value" : { "Ref" : "Volume04" } },
-    #    "Volume05" : { "Value" : { "Ref" : "Volume05" } },
-    #    "Volume06" : { "Value" : { "Ref" : "Volume06" } },
-    #    "Volume07" : { "Value" : { "Ref" : "Volume07" } },
-    #    "Volume08" : { "Value" : { "Ref" : "Volume08" } },
-    #    "Volume09" : { "Value" : { "Ref" : "Volume09" } },
-    #    "Volume10" : { "Value" : { "Ref" : "Volume10" } }
 
     print(t.to_json(indent=2))
 

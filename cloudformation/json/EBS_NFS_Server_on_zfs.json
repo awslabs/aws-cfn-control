@@ -21,6 +21,18 @@
         "True"
       ]
     },
+    "Has_Static_Private_IP": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "StaticPrivateIpAddress"
+            },
+            "NO_VALUE"
+          ]
+        }
+      ]
+    },
     "create_elastic_ip": {
       "Fn::Equals": [
         {
@@ -130,6 +142,7 @@
             "OperatingSystem",
             "VPCId",
             "Subnet",
+            "PrivateIpAddress",
             "UsePublicIp",
             "CreateElasticIP",
             "EC2KeyName",
@@ -198,6 +211,9 @@
         },
         "OperatingSystem": {
           "default": "Operating System of AMI"
+        },
+        "PrivateIpAddress": {
+          "default": "Static Private IP"
         },
         "RAIDLevel": {
           "default": "RAID Level"
@@ -323,6 +339,12 @@
       "Value": {
         "Ref": "S3BucketName"
       }
+    },
+    "StaticPrivateIpAddress": {
+      "Condition": "Has_Static_Private_IP",
+      "Value": {
+        "Ref": "StaticPrivateIpAddress"
+      }
     }
   },
   "Parameters": {
@@ -416,6 +438,11 @@
       "ConstraintDescription": "Must be a valid CIDR x.x.x.x/x",
       "Default": "111.222.333.444/32",
       "Description": "CIDR Block for SSH access",
+      "Type": "String"
+    },
+    "StaticPrivateIpAddress": {
+      "Default": "NO_VALUE",
+      "Description": "Static Private IP address",
       "Type": "String"
     },
     "Subnet": {
@@ -678,6 +705,17 @@
                     "Ref": "ExistingSecurityGroup"
                   }
                 ]
+              ]
+            },
+            "PrivateIpAddress": {
+              "Fn::If": [
+                "Has_Static_Private_IP",
+                {
+                  "Ref": "StaticPrivateIpAddress"
+                },
+                {
+                  "Ref": "AWS::NoValue"
+                }
               ]
             },
             "SubnetId": {
