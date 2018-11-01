@@ -89,7 +89,7 @@ def main():
             stacks = client.ls_stacks(show_deleted=False)
             for stack, i in sorted(stacks.items()):
                 if len(stack) > 37:
-                    stack = stack[:37] + "..."
+                    stack = stack[:37] + ">"
                 print('{0:<42.40} {1:<21.19} {2:<30.28} {3:<.30}'.format(stack, str(i[0]), i[1], i[2]))
         elif ls_stacks:
             print("Listing stacks...")
