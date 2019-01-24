@@ -534,7 +534,6 @@ class CfnControl:
         except ClientError as e:
             pass
 
-
         if template is not None:
             # check if the template is a URL, or a local file
             if self.url_check(template):
@@ -548,7 +547,6 @@ class CfnControl:
                 if not cfn_param_file:
                     cfn_param_file = self.build_cfn_param(stack_name, template_path, verbose=verbose)
                 self.template_body = self.parse_cfn_template(template_path)
-
 
         cfn_params = self.read_cfn_param_file(cfn_param_file)
         self.cfn_param_file = cfn_param_file
@@ -1079,7 +1077,7 @@ class CfnControl:
             if cli_val.lower().startswith("n"):
                 try:
                     if os.path.isfile(cfn_param_file):
-                        cli_val = raw_input("Parameters file {0} already exists, use this file [y/N]:  ".format(cfn_param_file))
+                        cli_val = raw_input("Parameters (not default) file {0} already exists, use this file [y/N]:  ".format(cfn_param_file))
 
                         if not cli_val:
                             cli_val = 'n'
@@ -1115,7 +1113,7 @@ class CfnControl:
                     if e.errno != errno.EEXIST:
                         raise
         elif os.path.isfile(cfn_param_file):
-            cli_val = raw_input("Parameters file {0} already exists, use this file [y/N]:  ".format(cfn_param_file))
+            cli_val = raw_input("second round - Parameters file {0} already exists, use this file [y/N]:  ".format(cfn_param_file))
 
             if not cli_val:
                 cli_val = 'n'
@@ -1123,7 +1121,7 @@ class CfnControl:
             if cli_val.lower().startswith("n"):
                 try:
                     os.remove(cfn_param_file)
-                    self.build_cfn_param(stack_name, template, verbose=verbose)
+                    self.cfn_param_file = cfn_param_file
                 except Exception as e:
                     raise ValueError(e)
             else:

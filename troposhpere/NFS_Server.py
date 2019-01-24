@@ -149,7 +149,7 @@ def main():
         'EC2KeyName',
         Type="AWS::EC2::KeyPair::KeyName",
         Description="Name of an existing EC2 KeyPair to enable SSH access to the instance.",
-        ConstraintDescription="REQUIRED: Must be a valud EC2 key pair"
+        ConstraintDescription="REQUIRED: Must be a valid EC2 key pair"
     ))
 
     OperatingSystem = t.add_parameter(Parameter(
