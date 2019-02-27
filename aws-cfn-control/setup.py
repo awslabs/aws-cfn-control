@@ -28,10 +28,11 @@ def open_file(fname):
     return open(os.path.join(os.path.dirname(__file__), fname))
 
 
-_version = "0.0.16"
+_version = "0.0.18"
 
 console_scripts = [ 'cfnctl = awscfnctl.cfnctl:main',
                     'getamiinfo = awscfnctl.getamiinfo:main',
+                    'build_ami_maps = awscfnctl.build_ami_maps:main'
                    ]
 
 

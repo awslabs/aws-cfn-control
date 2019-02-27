@@ -1,0 +1,18 @@
+Build python distribution and upload to PyPi
+
+Some instructions are here, but the steps below take precedence: https://packaging.python.org/tutorials/packaging-projects/
+
+Install dependencies:
+$ pip install --upgrade setuptools wheel
+$ pip install --upgrade twine
+
+Change directories to package directory
+
+Update setup.py with new version
+
+Build:
+$ python setup.py sdist
+
+Upload with twine, this should prompt for User/Password:
+$ twine upload dist/*
+
