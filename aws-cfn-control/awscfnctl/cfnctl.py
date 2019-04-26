@@ -20,27 +20,32 @@ from awscfnctl import CfnControl
 
 progname = 'cfnctl'
 
+
 def arg_parse():
 
     parser = argparse.ArgumentParser(prog=progname,
                                      description='Launch and manage CloudFormation templates from the command line')
 
     opt_group = parser.add_argument_group('optional arguments')
-    opt_group.add_argument('-a', dest='ls_all_stack_info', required=False, help='List more info on all stacks', action='store_true')
+    opt_group.add_argument('-a', dest='ls_all_stack_info', required=False, help='List more info on all stacks',
+                           action='store_true')
     opt_group.add_argument('-b', dest='bucket', required=False, help='Bucket to upload template to')
     opt_group.add_argument('-c', dest='create_stack', required=False, help="Create a stack", action='store_true')
     opt_group.add_argument('-d', dest='del_stack', required=False, help="Delete a stack", action='store_true')
-    opt_group.add_argument('-f', dest='param_file', required=False, help="cfnctl stack parameter file (includes template)")
+    opt_group.add_argument('-f', dest='param_file', required=False,
+                           help="cfnctl stack parameter file (includes template)")
     opt_group.add_argument('-l', dest='ls_stacks', required=False, help='List stacks', action='store_true')
     opt_group.add_argument('-nr', dest='no_rollback', required=False, help='Do not rollback', action='store_true')
     opt_group.add_argument('-p', dest='aws_profile', required=False, help='AWS Profile')
     opt_group.add_argument('-r', dest='region', required=False, help="Region name")
     opt_group.add_argument('-s', dest='stack_name', required=False, help="Stack name")
     opt_group.add_argument('-t', dest='template', required=False, help='CFN Template from local file or URL')
-    opt_group.add_argument('-y', dest='no_prompt', required=False, help='On interactive question, force yes', action='store_true')
-    opt_group.add_argument('-v', dest='verbose_param_file', required=False, help='Verbose config file', action='store_true')
+    opt_group.add_argument('-y', dest='no_prompt', required=False, help='On interactive question, force yes',
+                           action='store_true')
+    opt_group.add_argument('-v', dest='verbose_param_file', required=False, help='Verbose config file',
+                           action='store_true')
 
-    if len(sys.argv[1:])==0:
+    if len(sys.argv[1:]) == 0:
         parser.print_help()
         parser.exit()
 
@@ -77,7 +82,7 @@ def main():
     if args.no_rollback:
         rollback = 'DO_NOTHING'
 
-    client = CfnControl(region=region,aws_profile=aws_profile)
+    client = CfnControl(region=region, aws_profile=aws_profile)
 
     if ls_all_stack_info or ls_stacks:
         if ls_all_stack_info and ls_stacks:
@@ -98,10 +103,12 @@ def main():
                 print(' {}'.format(stack))
     elif create_stack:
         if stack_name and param_file and not template:
+            response = ""
             try:
                 response = client.cr_stack(stack_name, param_file, verbose=verbose_param_file, set_rollback=rollback)
-            except Exception as e:
-                raise ValueError(e)
+            except Exception as cr_stack_err:
+                print("Got response: {0}".format(response))
+                raise ValueError(cr_stack_err)
 
         elif template and stack_name:
 
@@ -113,23 +120,29 @@ def main():
                 if param_file:
                     param_file = param_file
                     print("Parameters file specified at CLI: {}".format(param_file))
-                response = client.cr_stack(stack_name, param_file, verbose=verbose_param_file, set_rollback=rollback, template=template)
-                return
-            except Exception as e:
+
+                response = client.cr_stack(stack_name, param_file, verbose=verbose_param_file, set_rollback=rollback,
+                                           template=template)
+                return response
+
+            except Exception as cr_stack_err:
                 if "Member must have length less than or equal to 51200" in e[0]:
                     if bucket:
                         print("Uploading {0} to bucket {1} and creating stack".format(template, bucket))
+                        response = ""
                         try:
-                            template_url = client.upload_to_bucket(template,bucket,template)
-                            response = client.cr_stack(stack_name, param_file, verbose=verbose_param_file, set_rollback=rollback, template=template_url)
-                        except Exception as e:
-                            raise ValueError(e)
+                            template_url = client.upload_to_bucket(template, bucket, template)
+                            response = client.cr_stack(stack_name, param_file, verbose=verbose_param_file,
+                                                       set_rollback=rollback, template=template_url)
+                        except Exception as upload_to_bucket_err:
+                            print("Got response: {0}".format(response))
+                            raise ValueError(upload_to_bucket_err)
                     else:
                         errmsg = "The template has too many bytes (>51,200), use the -b flag with a bucket name, or " \
                              "upload the template to an s3 bucket and specify the bucket URL with the -t flag "
                         raise ValueError(errmsg)
                 else:
-                    raise ValueError(e)
+                    raise ValueError(cr_stack_err)
         elif template and not stack_name:
             raise ValueError(errmsg_cr)
         elif not template and stack_name:
@@ -147,6 +160,8 @@ def main():
         print("No actions requested - shouldn't have got this far.")
         return 0
 
+    return rc
+
 
 if __name__ == "__main__":
     try:
@@ -156,6 +171,3 @@ if __name__ == "__main__":
         print 'Exiting...'
     except ValueError as e:
         print('ERROR: {0}'.format(e))
-
-
-
