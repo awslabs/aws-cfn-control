@@ -19,8 +19,11 @@ import argparse
 
 
 _PROPS = [
-    'ImageId',
     'Name',
+    'ImageId',
+    'ImageType',
+    'ImageLocation',
+    'State',
     'OwnerId',
     'Description',
     'EnaSupport',
@@ -30,7 +33,23 @@ _PROPS = [
     'Architecture',
     'RootDeviceType',
     'CreationDate',
-    'Public'
+    'Public',
+    'ProductCodeId',
+    'ImageOwnerAlias',
+    'BlockDeviceMappings',
+    'Architecture',
+    'RootDeviceType',
+    'RootDeviceName',
+    'Public',
+]
+
+_BlockDevice_INFO = [
+    'DeviceName',
+    'SnapshotId',
+    'DeleteOnTermination',
+    'VolumeType',
+    'VolumeSize',
+    'Encrypted',
 ]
 
 
@@ -95,7 +114,21 @@ def print_image_info(ami, client):
     resp = get_image_info(client, ami)
 
     for k in _PROPS:
-        print(" {0:<20}:  {1:<30}".format(k, resp[k]))
+        if k == "BlockDeviceMappings":
+            if type(resp[k]) is list:
+                for blk_devs in resp[k]:
+                    block_dev = dict(blk_devs)
+                    for dev in block_dev.keys():
+                        if type(block_dev[dev]) is str:
+                            print(" {0:<20}:    {1:<30}  {2:<30}".format(k, dev, block_dev[dev]))
+                        elif type(block_dev[dev]) is dict:
+                            if dev == "Ebs":
+                                print(" {0:<20}:      {1:<30}  {2:<30}".format(k, 'Block Device Type', dev))
+                            for dev_info in block_dev[dev].keys():
+                                print(" {0:<20}:      {1:<30}  {2:<30}".format(k, dev_info, block_dev[dev][dev_info]))
+        else:
+            print(" {0:<20}:  {1:<30}".format(k, resp[k]))
+
 
 def main():
 
