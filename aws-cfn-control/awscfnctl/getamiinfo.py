@@ -120,12 +120,12 @@ def print_image_info(ami, client):
                     block_dev = dict(blk_devs)
                     for dev in block_dev.keys():
                         if type(block_dev[dev]) is str:
-                            print(" {0:<20}:    {1:<30}  {2:<30}".format(k, dev, block_dev[dev]))
+                            print(" {0:<20}:  {1:<30}    {2:<30}".format(k, dev, block_dev[dev]))
                         elif type(block_dev[dev]) is dict:
                             if dev == "Ebs":
-                                print(" {0:<20}:      {1:<30}  {2:<30}".format(k, 'Block Device Type', dev))
+                                print(" {0:<20}:    {1:<30}  {2:<30}".format(k, 'Block Device Type', dev))
                             for dev_info in block_dev[dev].keys():
-                                print(" {0:<20}:      {1:<30}  {2:<30}".format(k, dev_info, block_dev[dev][dev_info]))
+                                print(" {0:<20}:    {1:<30}  {2:<30}".format(k, dev_info, block_dev[dev][dev_info]))
         else:
             print(" {0:<20}:  {1:<30}".format(k, resp[k]))
 
@@ -138,11 +138,11 @@ def main():
     region = args.region
     ami = args.ami_id
 
-    if region is "":
+    if region == "":
         region = 'us-east-1'
 
     client = boto3.client('ec2', region_name=region)
-    print("Checking region {} for AMI info...".format(region))
+    print("Checking region {0} for AMI info...".format(region))
     print_image_info(ami, client)
 
     return rc
