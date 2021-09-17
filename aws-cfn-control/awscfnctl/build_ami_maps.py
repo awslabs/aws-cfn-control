@@ -119,7 +119,7 @@ def image_info(client, owners, ami_name, region):
         if response["Images"][0]["ImageId"]:
             return response
     except:
-        print "Does the AMI requested exist in {0}? Not adding region {0} to list. Continuing...".format(region)
+        print("Does the AMI requested exist in {0}? Not adding region {0} to list. Continuing...".format(region))
         return "NONE"
 
 
@@ -133,8 +133,8 @@ def get_image_info(client, ami_id):
             ],
         )
     except Exception as e:
-        print e
-        print "Does {0} exist in us-east-1?  Checking next region ...".format(ami_id)
+        print(e)
+        print("Does {0} exist in us-east-1?  Checking next region ...".format(ami_id))
         sys.exit(1)
 
     ami_name     = response["Images"][0]["Name"]
@@ -148,7 +148,7 @@ def get_image_info(client, ami_id):
         description  = response["Images"][0]["Description"]
         ena          = response["Images"][0]["EnaSupport"]
         sriov        = response["Images"][0]["SriovNetSupport"]
-    except KeyError, e:
+    except KeyError as e:
         pass
 
     return ami_name, owners, description, ena, sriov
@@ -202,7 +202,7 @@ def main():
     ami_map = { "AWSRegionAMI": ami_map }
     ami_map = { "Mappings": ami_map }
 
-    print json.dumps(ami_map, indent=2, sort_keys=True)
+    print(json.dumps(ami_map, indent=2, sort_keys=True))
 
     ##print(ami_map)
 
@@ -213,8 +213,8 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except KeyboardInterrupt:
-        print '\nReceived Keyboard interrupt.'
-        print 'Exiting...'
+        print('\nReceived Keyboard interrupt.')
+        print('Exiting...')
     except ValueError as e:
         print('ERROR: {0}'.format(e))
 

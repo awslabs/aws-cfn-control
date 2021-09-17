@@ -19,10 +19,10 @@ import json
 import errno
 import boto3
 import operator
-import urlparse
 import textwrap
 import subprocess
-from ConfigParser import SafeConfigParser
+import configparser
+from urllib.parse import urlparse
 from botocore.exceptions import ClientError
 from botocore.exceptions import EndpointConnectionError
 
@@ -445,7 +445,7 @@ class CfnControl:
 
     def read_cfn_param_file(self, cfn_param_file=None):
 
-        parser = SafeConfigParser()
+        parser = configparser.SafeConfigParser()
         parser.optionxform = str
 
         if not cfn_param_file:
@@ -966,7 +966,7 @@ class CfnControl:
             if stack == stack_name:
                 print("\nStatus:")
                 print('{0:<32.30} {1:<21.19} {2:<30.28} {3:<.30}'.format(stack, str(i[0]), i[1], i[2]))
-                print
+                print("")
 
         response = self.client_cfn.describe_stacks(StackName=stack_name)
 
@@ -988,7 +988,7 @@ class CfnControl:
                     print('{0:<35} = {1:<30}'.format(o['OutputKey'], o['OutputValue']))
             except Exception as e:
                 print("No Outputs found")
-                print ValueError(e)
+                print(ValueError(e))
 
         print("")
         return

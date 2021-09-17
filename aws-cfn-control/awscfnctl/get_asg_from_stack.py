@@ -70,5 +70,5 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except KeyboardInterrupt:
-        print '\nReceived Keyboard interrupt.'
-        print 'Exiting...'
+        print('\nReceived Keyboard interrupt.')
+        print('Exiting...')

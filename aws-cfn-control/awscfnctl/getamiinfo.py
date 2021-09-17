@@ -152,8 +152,8 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except KeyboardInterrupt:
-        print '\nReceived Keyboard interrupt.'
-        print 'Exiting...'
+        print('\nReceived Keyboard interrupt.')
+        print('Exiting...')
     except ValueError as e:
         print('ERROR: {0}'.format(e))
 
