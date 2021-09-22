@@ -36,7 +36,7 @@ $ aws s3 cp stack1.json s3://user-stacks/
 The configuration process accounts for default values, built-in lists, and will prompted on any Parameter that is using "ConstraintDescription" and does not have a value.
 
 ```
-$ cfnctl -r us-east-1 -b https://s3-us-west-1.amazonaws.com/user-stacks/stack1.json
+$ cfnctl create -n test_stack1 -r us-east-1 -b https://s3-us-west-1.amazonaws.com/user-stacks/stack1.json
 Creating config file /Users/joeuser/.cfnctlconfig/stack1.json.cf
 Using config file /Users/joeuser/.cfnctlconfig/stack1.json.cf
 EC2 keys found in us-east-1:
@@ -61,10 +61,12 @@ Getting subnets from vpc-5u5u235u...
   subnet-jasdfj23 | us-east-1e | Default 1e
   subnet-asdfeirj | us-east-1c | Default 1c
 Select subnet: subnet-123ljias
-Done building cfnctl config file.
+...
 ```
 
 ### Fill in parameter values by editing the cfnctl configuration file
+
+In you home directory under ~/.cfnparams, you will find a parameters file that you can edit and relaunch with the new settings.
 
 Edit the configuration file as needed, if you see "<VALUE_NEEDED>", those values can not be null for successful stack luanch.
 
@@ -139,11 +141,5 @@ Subnet                              = subnet-123ljias
 ElasticIP                           = 109.234.22.45
 
 ```
-
-
-## AWS Key setup
-
-
-## Listing active stacks
 
 

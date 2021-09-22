@@ -61,6 +61,7 @@ def main():
     create_stack = False
     del_stack = False
     ls_stacks = False
+    build_param_file = False
 
     if args.cfn_action == "create":
         create_stack = True
@@ -68,6 +69,8 @@ def main():
         del_stack = True
     elif args.cfn_action == "list":
         ls_stacks = True
+    elif args.cfn_action == "build":
+        build_param_file = True
     else:
         print('Action has to be "create|delete|list"')
         sys.exit(1)
@@ -162,6 +165,8 @@ def main():
             errmsg = "Must specify a stack to delete (-n)"
             raise ValueError(errmsg)
         client.del_stack(stack_name, no_prompt=no_prompt)
+    elif build_param_file:
+        client.build_cfn_param('default', template)
     elif param_file or stack_name:
         raise ValueError(errmsg_cr)
     else:

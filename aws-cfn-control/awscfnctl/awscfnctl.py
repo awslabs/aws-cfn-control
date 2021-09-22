@@ -1099,7 +1099,7 @@ class CfnControl:
                             except Exception as e:
                                 raise ValueError(e)
                         else:
-                            # params file already build, nothing left to do here
+                            # params file already built, nothing left to do here
                             return cfn_param_file
                     else:
                         print('Stack config file does not exists, continuing...')
@@ -1123,7 +1123,7 @@ class CfnControl:
                     if e.errno != errno.EEXIST:
                         raise
         elif os.path.isfile(cfn_param_file):
-            cli_val = input("second round - Parameters file {0} already exists, use this file [y/N]:  ".format(cfn_param_file))
+            cli_val = input("Parameters file {0} already exists, use this file [y/N]:  ".format(cfn_param_file))
 
             if not cli_val:
                 cli_val = 'n'
