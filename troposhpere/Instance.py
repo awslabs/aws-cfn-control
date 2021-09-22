@@ -41,15 +41,13 @@ from troposphere.efs import FileSystem, MountTarget
 
 from troposphere.policies import CreationPolicy, ResourceSignal
 
+
 def main():
 
     t = Template()
-    t.add_version("2010-09-09")
-    t.add_description("testing")
+    t.set_description("test instance launch")
+    t.set_version("2010-09-09")
 
-
-
-    InstUserData = list()
     InstUserData = [
         '#!/usr/bin/env bash\n',
         '\n',
@@ -59,7 +57,6 @@ def main():
         'curl -X PUT -H \'Content-Type:\' --data-binary \'{ "Status" : "SUCCESS",  "Reason" : "Instance launched",  "UniqueId" : "launch001",  "Data" : "Instance launched."}\'  "${my_wait_handle}"', '\n',
         '\n',
     ]
-
 
     EC2KeyName = t.add_parameter(Parameter(
         'EC2KeyName',
@@ -85,14 +82,7 @@ def main():
         'MyInstanceType',
         Type="String",
         Description="Instance type",
-        Default="r4.16xlarge",
-        AllowedValues=[
-            "m4.16xlarge",
-            "m4.10xlarge",
-            "r4.16xlarge",
-            "c8.8xlarge"
-        ],
-        ConstraintDescription= "Must an EC2 instance type from the list"
+        Default="m5.24xlarge",
     ))
 
     VPCId = t.add_parameter(Parameter(
@@ -291,7 +281,7 @@ def main():
         )
     ])
 
-
+    #print(t.to_yaml())
     print(t.to_json(indent=2))
 
 

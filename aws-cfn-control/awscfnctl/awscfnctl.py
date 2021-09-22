@@ -530,7 +530,10 @@ class CfnControl:
 
         try:
             stk_response = self.client_cfn.describe_stacks(StackName=stack_name)
-            raise ValueError('The stack "{0}" exists.  Exiting...'.format(stack_name))
+            print('The stack "{0}" exists.  Exiting...'.format(stack_name))
+            sys.exit()
+        except ValueError as e:
+            raise ValueError
         except ClientError as e:
             pass
 
@@ -556,7 +559,7 @@ class CfnControl:
                 self.template_url = self.cfn_param_file_values['TemplateURL']
                 print("Using template from URL {}".format(self.template_url))
         except Exception as e:
-            if "TemplateURL" in e[0]:
+            if "TemplateURL" in str(e):
                 try:
                     if self.cfn_param_file_values['TemplateBody']:
                         self.template_body = self.cfn_param_file_values['TemplateBody']
@@ -618,6 +621,7 @@ class CfnControl:
             return
 
         stack_rc = self.stack_status(stack_name=stack_name)
+
         if stack_rc != 'CREATE_COMPLETE':
             print('Stack creation failed with {0}'.format(stack_rc))
             return
@@ -673,7 +677,7 @@ class CfnControl:
                             except Exception as e:
                                 raise ValueError(e)
                         else:
-                            cli_val = raw_input('Parameters file "{0}" exists, delete also? [y/N] '.format(f_path))
+                            cli_val = input('Parameters file "{0}" exists, delete also? [y/N] '.format(f_path))
 
                             if not cli_val:
                                 cli_val = 'n'
@@ -826,9 +830,9 @@ class CfnControl:
                 if event_id not in all_events:
                     all_events.append(event_id)
                     try:
-                        print('{0:<30} :  {1:<25} :  {2}'.format(s['LogicalResourceId'], s['ResourceStatus'], s['ResourceStatusReason']))
+                        print('{0:<38} :  {1:<25} :  {2}'.format(s['LogicalResourceId'], s['ResourceStatus'], s['ResourceStatusReason']))
                     except KeyError:
-                        print('{0:<30} :  {1:<25}'.format(s['LogicalResourceId'], s['ResourceStatus']))
+                        print('{0:<38} :  {1:<25}'.format(s['LogicalResourceId'], s['ResourceStatus']))
                     except Exception as e:
                         raise ValueError(e)
 
@@ -940,9 +944,12 @@ class CfnControl:
 
         stk_output = dict()
 
-        for i in stk_response['Stacks']:
-            for r in i['Outputs']:
-                stk_output[r['OutputKey']] = r['OutputValue']
+        #for i in stk_response['Stacks']:
+        #    try:
+        #        for r in i['Outputs']:
+        #            stk_output[r['OutputKey']] = r['OutputValue']
+        #    except KeyError:
+        #        print("No Outputs found")
 
         return stk_output
 
@@ -965,7 +972,7 @@ class CfnControl:
         for stack, i in sorted(stack_status.items()):
             if stack == stack_name:
                 print("\nStatus:")
-                print('{0:<32.30} {1:<21.19} {2:<30.28} {3:<.30}'.format(stack, str(i[0]), i[1], i[2]))
+                print('{0:<40.38} {1:<21.19} {2:<30.28} {3:<.30}'.format(stack, str(i[0]), i[1], i[2]))
                 print("")
 
         response = self.client_cfn.describe_stacks(StackName=stack_name)
@@ -975,7 +982,7 @@ class CfnControl:
             print('[Parameters]')
             try:
                 for p in i['Parameters']:
-                    print('{0:<35} = {1:<30}'.format(p['ParameterKey'], p['ParameterValue']))
+                    print('{0:<38} = {1:<30}'.format(p['ParameterKey'], p['ParameterValue']))
             except Exception as e:
                 print("No Parameters found")
                 raise ValueError(e)
@@ -985,10 +992,10 @@ class CfnControl:
             print('[Outputs]')
             try:
                 for o in i['Outputs']:
-                    print('{0:<35} = {1:<30}'.format(o['OutputKey'], o['OutputValue']))
+                    print('{0:<38} = {1:<30}'.format(o['OutputKey'], o['OutputValue']))
             except Exception as e:
                 print("No Outputs found")
-                print(ValueError(e))
+                #print(ValueError(e))
 
         print("")
         return
@@ -1018,10 +1025,13 @@ class CfnControl:
             cfn_param_file = self.cfn_param_file
 
         print('Removing incomplete parameters file {0}'.format(cfn_param_file))
-        try:
+
+        if os.path.exists(cfn_param_file):
             os.remove(cfn_param_file)
-        except Exception as e:
-            raise e
+            return
+        else:
+            print('File does not exists: {0}'.format(cfn_param_file))
+            sys.exit()
 
         sys.exit(1)
 
@@ -1047,7 +1057,7 @@ class CfnControl:
             except:
                 print('  {0} | {1} | {2}'.format(vpc_id, vpc_info['CidrBlock'], vpc_info['IsDefault']))
 
-        cli_val = raw_input("Select VPC: ")
+        cli_val = input("Select VPC: ")
         if cli_val not in vpc_ids:
             print("Valid VPC required.  Exiting... ")
             self.rm_cfn_param_file(cfn_param_file)
@@ -1069,7 +1079,7 @@ class CfnControl:
         found_required_val = False
 
         if os.path.isfile(cfn_param_file_default):
-            cli_val = raw_input("Default parameters file {0} exists, use this file [Y/n]:  ".format(cfn_param_file_default))
+            cli_val = input("Default parameters file {0} exists, use this file [Y/n]:  ".format(cfn_param_file_default))
 
             if not cli_val:
                 cli_val = 'y'
@@ -1077,7 +1087,7 @@ class CfnControl:
             if cli_val.lower().startswith("n"):
                 try:
                     if os.path.isfile(cfn_param_file):
-                        cli_val = raw_input("Parameters (not default) file {0} already exists, use this file [y/N]:  ".format(cfn_param_file))
+                        cli_val = input("Parameters (not default) file {0} already exists, use this file [y/N]:  ".format(cfn_param_file))
 
                         if not cli_val:
                             cli_val = 'n'
@@ -1113,7 +1123,7 @@ class CfnControl:
                     if e.errno != errno.EEXIST:
                         raise
         elif os.path.isfile(cfn_param_file):
-            cli_val = raw_input("second round - Parameters file {0} already exists, use this file [y/N]:  ".format(cfn_param_file))
+            cli_val = input("second round - Parameters file {0} already exists, use this file [y/N]:  ".format(cfn_param_file))
 
             if not cli_val:
                 cli_val = 'n'
@@ -1170,11 +1180,11 @@ class CfnControl:
                     #print('  {0}'.format(', '.join(self.key_pairs)))
                     for k in self.key_pairs:
                         print('  {0}'.format(k))
-                    cli_val = raw_input("Select EC2 Key: ")
+                    cli_val = input("Select EC2 Key: ")
                     if cli_val not in self.key_pairs:
                         print("Valid EC2 Key Pair required.  Exiting... ")
                         self.rm_cfn_param_file(cfn_param_file)
-                        return
+                        sys.exit()
             except Exception as e:
                 print(e)
 
@@ -1215,7 +1225,7 @@ class CfnControl:
                                                              subnet_info['Tag_Name'][0:20]))
                         except KeyError:
                             print('  {0} | {1}'.format(subnet_id, subnet_info['AvailabilityZone']))
-                    cli_val = raw_input("Select subnet: ")
+                    cli_val = input("Select subnet: ")
                     if cli_val not in subnet_ids:
                         print("Valid subnet ID required.  Exiting... ")
                         self.rm_cfn_param_file(cfn_param_file)
@@ -1241,7 +1251,7 @@ class CfnControl:
                     for r in all_security_group_info:
                         security_group_ids.append(r['GroupId'])
                         print('  {0} | {1}'.format(r['GroupId'], r['GroupName'][0:20]))
-                    cli_val = raw_input('Select security group: ')
+                    cli_val = input('Select security group: ')
                     if cli_val not in security_group_ids:
                         print("Valid security group required.  Exiting... ")
                         self.rm_cfn_param_file(cfn_param_file)
@@ -1296,7 +1306,7 @@ class CfnControl:
                         except KeyError:
                             pass
 
-                    cli_val = raw_input('{0} [{1}]: '.format(p, default_val))
+                    cli_val = input('{0} [{1}]: '.format(p, default_val))
 
                     if cli_val == "":
                         cli_val = default_val
@@ -1307,7 +1317,7 @@ class CfnControl:
             try:
                 if cli_val is None and default_val is None and json_content['Parameters'][p]['ConstraintDescription']:
                     print('Parameter "{0}" is required, but can be changed in the cfnctl parameters file'.format(p))
-                    cli_val = raw_input('Enter {0}: '.format(p))
+                    cli_val = input('Enter {0}: '.format(p))
                     if cli_val == "":
                         cli_val = "<VALUE_NEEDED>"
                         found_required_val = True

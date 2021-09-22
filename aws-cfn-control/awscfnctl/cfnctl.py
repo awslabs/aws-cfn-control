@@ -26,19 +26,19 @@ def arg_parse():
     parser = argparse.ArgumentParser(prog=progname,
                                      description='Launch and manage CloudFormation templates from the command line')
 
-    opt_group = parser.add_argument_group('optional arguments')
-    opt_group.add_argument('-a', dest='ls_all_stack_info', required=False, help='List more info on all stacks',
+    req_group = parser.add_argument_group('required arguments')
+    req_group.add_argument('cfn_action', type=str, help="Action: create|delete|list")
+
+    opt_group = parser.add_argument_group('additional optional arguments')
+    opt_group.add_argument('-d', dest='ls_all_stack_info', required=False, help='List details on all stacks',
                            action='store_true')
     opt_group.add_argument('-b', dest='bucket', required=False, help='Bucket to upload template to')
-    opt_group.add_argument('-c', dest='create_stack', required=False, help="Create a stack", action='store_true')
-    opt_group.add_argument('-d', dest='del_stack', required=False, help="Delete a stack", action='store_true')
     opt_group.add_argument('-f', dest='param_file', required=False,
                            help="cfnctl stack parameter file (includes template)")
-    opt_group.add_argument('-l', dest='ls_stacks', required=False, help='List stacks', action='store_true')
     opt_group.add_argument('-nr', dest='no_rollback', required=False, help='Do not rollback', action='store_true')
     opt_group.add_argument('-p', dest='aws_profile', required=False, help='AWS Profile')
     opt_group.add_argument('-r', dest='region', required=False, help="Region name")
-    opt_group.add_argument('-s', dest='stack_name', required=False, help="Stack name")
+    opt_group.add_argument('-n', dest='stack_name', required=False, help="Stack name")
     opt_group.add_argument('-t', dest='template', required=False, help='CFN Template from local file or URL')
     opt_group.add_argument('-y', dest='no_prompt', required=False, help='On interactive question, force yes',
                            action='store_true')
@@ -58,11 +58,22 @@ def main():
     args = arg_parse()
     rollback = 'ROLLBACK'
 
+    create_stack = False
+    del_stack = False
+    ls_stacks = False
+
+    if args.cfn_action == "create":
+        create_stack = True
+    elif args.cfn_action == "delete":
+        del_stack = True
+    elif args.cfn_action == "list":
+        ls_stacks = True
+    else:
+        print('Action has to be "create|delete|list"')
+        sys.exit(1)
+
     bucket = args.bucket
-    create_stack = args.create_stack
-    del_stack = args.del_stack
     param_file = args.param_file
-    ls_stacks = args.ls_stacks
     ls_all_stack_info = args.ls_all_stack_info
     region = args.region
     stack_name = args.stack_name
@@ -70,7 +81,7 @@ def main():
     no_prompt = args.no_prompt
     verbose_param_file = args.verbose_param_file
 
-    errmsg_cr = "Creating a stack requires create flag (-c), stack name (-s), and for new stacks " \
+    errmsg_cr = "Creating a stack requires 'create' action, stack name (-n), and for new stacks " \
                 "the template (-t) flag or for configured stacks, the -f flag for parameters file, " \
                 "which includes the template location"
 
@@ -86,10 +97,6 @@ def main():
 
     if ls_all_stack_info or ls_stacks:
         if ls_all_stack_info and ls_stacks:
-            errmsg = "Specify either -l or -a, not both"
-            raise ValueError(errmsg)
-
-        if ls_all_stack_info:
             print("Gathering all info on CFN stacks...")
             stacks = client.ls_stacks(show_deleted=False)
             for stack, i in sorted(stacks.items()):
@@ -123,10 +130,11 @@ def main():
 
                 response = client.cr_stack(stack_name, param_file, verbose=verbose_param_file, set_rollback=rollback,
                                            template=template)
-                return response
+                #return response
+                return
 
             except Exception as cr_stack_err:
-                if "Member must have length less than or equal to 51200" in e[0]:
+                if "Member must have length less than or equal to 51200" in str(cr_stack_err):
                     if bucket:
                         print("Uploading {0} to bucket {1} and creating stack".format(template, bucket))
                         response = ""
@@ -151,7 +159,7 @@ def main():
             raise ValueError(errmsg_cr)
     elif del_stack:
         if not stack_name:
-            errmsg = "Must specify a stack to delete (-s)"
+            errmsg = "Must specify a stack to delete (-n)"
             raise ValueError(errmsg)
         client.del_stack(stack_name, no_prompt=no_prompt)
     elif param_file or stack_name:
@@ -170,4 +178,6 @@ if __name__ == "__main__":
         print('\nReceived Keyboard interrupt.')
         print('Exiting...')
     except ValueError as e:
+        print('ERROR: {0}'.format(e))
+    except Exception as e:
         print('ERROR: {0}'.format(e))
