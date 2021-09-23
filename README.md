@@ -29,7 +29,7 @@ TL;DR
 The configuration process accounts for default values, built-in lists, and will prompted on any Parameter that is using "ConstraintDescription" and does not have a value. It will be saved in the ~/.cfnparam directory with ".default" appended to the template name. For example, the parameter file for the template stack1.json, is ~/.cfnparam/stack1.json.default.
 
 ```
-$ cfnctl build -f stack1.json
+$ cfnctl build -t stack1.json
 Creating config file /Users/joeuser/.cfnparam/stack1.json.default
 Using config file /Users/joeuser/.cfnparam/stack1.json.default
 EC2 keys found in us-east-1:
