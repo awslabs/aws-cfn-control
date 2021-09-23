@@ -19,26 +19,19 @@ pip install aws-cfn-control
 
 TL;DR
 
-1. Upload CloudFormation template to an s3 bucket
-2. Build cfnctl configuration file
-3. Fill in parameter values by editing the cfnctl configuration file
-4. Launch the stack
-5. Check stack status and outputs
+1. Build cfnctl parameters file
+2. Fill in parameter values by editing the cfnctl configuration file (in ~/.cfnparam)
+3. Launch the stack
+4. Check stack status and outputs
 
-### Upload CloudFormation template to an s3 bucket
+### Optional (but recommended) - Build cfnctl parameters file  (stored in ~/.cfnparam)
 
-```
-$ aws s3 cp stack1.json s3://user-stacks/
-```
-
-### Build cfnctl configuration file using template in s3 bucket
-
-The configuration process accounts for default values, built-in lists, and will prompted on any Parameter that is using "ConstraintDescription" and does not have a value.
+The configuration process accounts for default values, built-in lists, and will prompted on any Parameter that is using "ConstraintDescription" and does not have a value. It will be saved in the ~/.cfnparam directory with ".default" appended to the template name. For example, the parameter file for the template stack1.json, is ~/.cfnparam/stack1.json.default.
 
 ```
-$ cfnctl create -n test_stack1 -r us-east-1 -b https://s3-us-west-1.amazonaws.com/user-stacks/stack1.json
-Creating config file /Users/joeuser/.cfnctlconfig/stack1.json.cf
-Using config file /Users/joeuser/.cfnctlconfig/stack1.json.cf
+$ cfnctl build -f stack1.json
+Creating config file /Users/joeuser/.cfnparam/stack1.json.default
+Using config file /Users/joeuser/.cfnparam/stack1.json.default
 EC2 keys found in us-east-1:
   Jouser_IAD
 Select EC2 Key: Jouser_IAD
@@ -64,11 +57,9 @@ Select subnet: subnet-123ljias
 ...
 ```
 
-### Fill in parameter values by editing the cfnctl configuration file
+#### Edit the parameters file, and fill in values as needed 
 
-In you home directory under ~/.cfnparams, you will find a parameters file that you can edit and relaunch with the new settings.
-
-Edit the configuration file as needed, if you see "<VALUE_NEEDED>", those values can not be null for successful stack luanch.
+In you home directory under ~/.cfnparam, you will find a parameters file that you can edit and relaunch with the new settings. Edit the configuration file as needed, if you see "<VALUE_NEEDED>", those values can not be null for successful stack luanch.
 
 ```
 [AWS-Config]
@@ -94,12 +85,45 @@ VPCId                               = vpc-5u5u235u
 ```
 
 
-### Launch the stack
+### Launch the stack 
+
+If you already created the parameters file (steps above), when you run the create command you will be prompted to choose from either the existing (default) parameters file, or continue the create while answering the parameters questions one at a time.
+
+For example, if the default parameters file exists you will this:
 
 ```
-$ cfnctl -s st1 -r us-east-1 -c stack1.json.cf
-Using config file: /Users/jouser/.cfnctlconfig/stack1.json.cf
-cluster-test2                  :  CREATE_IN_PROGRESS
+$ cfnctl create -n teststack1 -t stack1.json 
+Using AWS credentials profile "default"
+Lools like we're in us-east-1
+Default parameters file /Users/joeuser/.cfnparam/stack1.json.default exists, use this file [Y/n]:
+```
+Answering "y" will create the stack using the values from the previously created default parameters file. Otherwise, you will be prompted for each parameter, and the parameters will be saved in the ~/.cfnparam directory with values used to create the stack with the stack name appended to the template name. For example, the parameter file for the template stack1.json using the stack name "teststack1", will be ~/.cfnparam/stack1.json.teststack1.
+
+```
+$ cfnctl create -n teststack1 -t stack1.json
+Using AWS credentials profile "default"
+Lools like we're in us-east-1
+Default parameters file /Users/joeuser/.cfnparam/stack1.json.default exists, use this file [Y/n]: n
+Stack config file does not exists, continuing...
+Creating parameters file /Users/joeuser/.cfnparam/stack1.json.teststack1
+...
+```
+
+You can use any parameters file (using -f) to create a stack, as it has the template location and paramters in the file. For example, to create a new stack using the parameters from the stack name "teststack1", you run this: 
+
+```
+$ cfnctl create -n teststack2 -f ~/.cfnparam/stack1.json.teststack1
+```
+
+Here is example output from a create, using a previously created default parameters file:
+
+```
+$ cfnctl create -n teststack1 -t stack1.json 
+Using AWS credentials profile "default"
+Lools like we're in us-east-1
+Default parameters file /Users/joeuser/.cfnparam/stack1.json.default exists, use this file [Y/n]: y
+Using parameters file: /Users/jouser/.cfnparam/stack1.json.default
+teststack1                     :  CREATE_IN_PROGRESS
 RootRole                       :  CREATE_IN_PROGRESS
 PlacementGroup                 :  CREATE_IN_PROGRESS
 EIPAddress                     :  CREATE_COMPLETE
@@ -111,7 +135,7 @@ ASG01LaunchConfiguration       :  CREATE_COMPLETE
 AutoScalingGroup01             :  CREATE_IN_PROGRESS
 AutoScalingGroup01             :  CREATE_IN_PROGRESS
 AutoScalingGroup01             :  CREATE_COMPLETE
-st1                            :  CREATE_COMPLETE
+teststack1                     :  CREATE_COMPLETE
 ```
 
 ### Check stack status and outputs

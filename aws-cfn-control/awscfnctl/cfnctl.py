@@ -27,7 +27,7 @@ def arg_parse():
                                      description='Launch and manage CloudFormation templates from the command line')
 
     req_group = parser.add_argument_group('required arguments')
-    req_group.add_argument('cfn_action', type=str, help="Action: create|delete|list")
+    req_group.add_argument('cfn_action', type=str, help="Action: create|delete|list|build")
 
     opt_group = parser.add_argument_group('additional optional arguments')
     opt_group.add_argument('-d', dest='ls_all_stack_info', required=False, help='List details on all stacks',
