@@ -53,9 +53,37 @@ This second command (using -f) uses an existing parameters file, which has the t
 
 ## More detailed information
 
+### Command help
+
+```text
+usage: cfnctl [-h] [-r REGION] [-n STACK_NAME] [-t TEMPLATE] [-f PARAM_FILE] [-d] [-b BUCKET] [-nr] [-p AWS_PROFILE] [-y] [-v] cfn_action
+
+Launch and manage CloudFormation templates from the command line
+
+positional arguments:
+  cfn_action      REQUIRED: Action: build|create|list|delete
+                    build    Builds the CFN parameter file (-t required)
+                    create   Creates a new stack (-n and [-t|-f] required)
+                    list     List all stacks (-d provides extra detail)
+                    delete   Deletes a stack (-n is required)
+
+arguments:
+  -h, --help      show this help message and exit
+  -r REGION       Region name
+  -n STACK_NAME   Stack name
+  -t TEMPLATE     CFN Template from local file or S3 URL
+  -f PARAM_FILE   Template parameter file
+  -d              List details on all stacks
+  -b BUCKET       Bucket to upload template to
+  -nr             Do not rollback
+  -p AWS_PROFILE  AWS Profile
+  -y              On interactive question, force yes
+  -v              Verbose config file
+```
+
 ### Optional (but recommended) - Build cfnctl parameters file  (stored in ~/.cfnparam)
 
-The configuration process accounts for default values, built-in lists, and will prompted on any Parameter that is using "ConstraintDescription" and does not have a value. It will be saved in the ~/.cfnparam directory with ".default" appended to the template name. For example, the parameter file for the template stack1.json, is ~/.cfnparam/stack1.json.default.
+The build process accounts for default values, built-in lists, and will prompted on any Parameter that is using "ConstraintDescription" and does not have a value. It will be saved in the ~/.cfnparam directory with ".default" appended to the template name. For example, the parameter file for the template stack1.json, is ~/.cfnparam/stack1.json.default.
 
 ```
 $ cfnctl build -t stack1.json

@@ -41,7 +41,7 @@ def arg_parse():
     parser.add_argument('-n', dest='stack_name', required=False, help="Stack name")
     parser.add_argument('-t', dest='template', required=False, help='CFN Template from local file or S3 URL')
     parser.add_argument('-f', dest='param_file', required=False,
-                        help="cfnctl stack parameter file")
+                        help="Template parameter file")
     parser.add_argument('-d', dest='ls_all_stack_info', required=False, help='List details on all stacks',
                         action='store_true')
     parser.add_argument('-b', dest='bucket', required=False, help='Bucket to upload template to')
