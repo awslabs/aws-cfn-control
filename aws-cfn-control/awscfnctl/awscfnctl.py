@@ -1060,6 +1060,7 @@ class CfnControl:
                 print('  {0} | {1} | {2}'.format(vpc_id, vpc_info['CidrBlock'], vpc_info['IsDefault']))
 
         cli_val = input("Select VPC: ")
+        cli_val = cli_val.strip()
         if cli_val not in vpc_ids:
             print("Valid VPC required.  Exiting... ")
             self.rm_cfn_param_file(cfn_param_file)
@@ -1199,6 +1200,7 @@ class CfnControl:
                     for k in self.key_pairs:
                         print('  {0}'.format(k))
                     cli_val = input("Select EC2 Key: ")
+                    cli_val = cli_val.strip()
                     if cli_val not in self.key_pairs:
                         print("Valid EC2 Key Pair required.  Exiting... ")
                         self.rm_cfn_param_file(cfn_param_file)
@@ -1244,6 +1246,7 @@ class CfnControl:
                         except KeyError:
                             print('  {0} | {1}'.format(subnet_id, subnet_info['AvailabilityZone']))
                     cli_val = input("Select subnet: ")
+                    cli_val = cli_val.strip()
                     if cli_val not in subnet_ids:
                         print("Valid subnet ID required.  Exiting... ")
                         self.rm_cfn_param_file(cfn_param_file)
@@ -1270,6 +1273,7 @@ class CfnControl:
                         security_group_ids.append(r['GroupId'])
                         print('  {0} | {1}'.format(r['GroupId'], r['GroupName'][0:20]))
                     cli_val = input('Select security group: ')
+                    cli_val = cli_val.strip()
                     if cli_val not in security_group_ids:
                         print("Valid security group required.  Exiting... ")
                         self.rm_cfn_param_file(cfn_param_file)
@@ -1375,7 +1379,7 @@ class CfnControl:
             for k, v in sorted(cfn_param_file_to_write.items()):
                 cfn_out_file.write('{0:<35} = {1}\n'.format(k, v))
 
-        print("Done building cfnctl parameters file, includes template location")
+        print("Done building cfnctl parameters file {0}, includes template location".format(cfn_param_file))
 
         return cfn_param_file
 
