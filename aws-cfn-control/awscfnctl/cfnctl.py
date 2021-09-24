@@ -17,6 +17,7 @@ import os
 import sys
 import argparse
 from awscfnctl import CfnControl
+from argparse import RawTextHelpFormatter
 
 progname = 'cfnctl'
 
@@ -24,26 +25,32 @@ progname = 'cfnctl'
 def arg_parse():
 
     parser = argparse.ArgumentParser(prog=progname,
-                                     description='Launch and manage CloudFormation templates from the command line')
+                                     description='Launch and manage CloudFormation templates from the command line',
+                                     formatter_class=RawTextHelpFormatter
+                                     )
+    parser._optionals.title = "arguments"
 
-    req_group = parser.add_argument_group('required arguments')
-    req_group.add_argument('cfn_action', type=str, help="Action: create|delete|list|build")
-
-    opt_group = parser.add_argument_group('additional optional arguments')
-    opt_group.add_argument('-d', dest='ls_all_stack_info', required=False, help='List details on all stacks',
-                           action='store_true')
-    opt_group.add_argument('-b', dest='bucket', required=False, help='Bucket to upload template to')
-    opt_group.add_argument('-f', dest='param_file', required=False,
-                           help="cfnctl stack parameter file (includes template)")
-    opt_group.add_argument('-nr', dest='no_rollback', required=False, help='Do not rollback', action='store_true')
-    opt_group.add_argument('-p', dest='aws_profile', required=False, help='AWS Profile')
-    opt_group.add_argument('-r', dest='region', required=False, help="Region name")
-    opt_group.add_argument('-n', dest='stack_name', required=False, help="Stack name")
-    opt_group.add_argument('-t', dest='template', required=False, help='CFN Template from local file or URL')
-    opt_group.add_argument('-y', dest='no_prompt', required=False, help='On interactive question, force yes',
-                           action='store_true')
-    opt_group.add_argument('-v', dest='verbose_param_file', required=False, help='Verbose config file',
-                           action='store_true')
+    parser.add_argument('cfn_action', type=str,
+                        help="REQUIRED: Action: build|create|list|delete\n"
+                             "  build    Builds the CFN parameter file (-t required)\n"
+                             "  create   Creates a new stack (-n and [-t|-f] required)\n"
+                             "  list     List all stacks (-d provides extra detail)\n"
+                             "  delete   Deletes a stack (-n is required)"
+                        )
+    parser.add_argument('-r', dest='region', required=False, help="Region name")
+    parser.add_argument('-n', dest='stack_name', required=False, help="Stack name")
+    parser.add_argument('-t', dest='template', required=False, help='CFN Template from local file or S3 URL')
+    parser.add_argument('-f', dest='param_file', required=False,
+                        help="cfnctl stack parameter file")
+    parser.add_argument('-d', dest='ls_all_stack_info', required=False, help='List details on all stacks',
+                        action='store_true')
+    parser.add_argument('-b', dest='bucket', required=False, help='Bucket to upload template to')
+    parser.add_argument('-nr', dest='no_rollback', required=False, help='Do not rollback', action='store_true')
+    parser.add_argument('-p', dest='aws_profile', required=False, help='AWS Profile')
+    parser.add_argument('-y', dest='no_prompt', required=False, help='On interactive question, force yes',
+                        action='store_true')
+    parser.add_argument('-v', dest='verbose_param_file', required=False, help='Verbose config file',
+                        action='store_true')
 
     if len(sys.argv[1:]) == 0:
         parser.print_help()
@@ -72,7 +79,7 @@ def main():
     elif args.cfn_action == "build":
         build_param_file = True
     else:
-        print('Action has to be "create|delete|list"')
+        print('Action has to be "build|create|list|delete"')
         sys.exit(1)
 
     bucket = args.bucket
@@ -166,7 +173,7 @@ def main():
             raise ValueError(errmsg)
         client.del_stack(stack_name, no_prompt=no_prompt)
     elif build_param_file:
-        client.build_cfn_param('default', template)
+        client.build_cfn_param('default', template, cli_template=template)
     elif param_file or stack_name:
         raise ValueError(errmsg_cr)
     else:

@@ -1,13 +1,16 @@
 # AWS CFN Control [![Build Status](https://api.travis-ci.org/awslabs/aws-cfn-control.png?branch=master)](https://travis-ci.org/awslabs/aws-cfn-control) [![PyPi Status](https://badge.fury.io/py/aws-cfn-control.png)](https://badge.fury.io/py/aws-cfn-control)
 
 
-AWS-CFN-Control provides an interface to quickly deploy and redeploy CloudFormation stacks. The `cfnctl` command provides the core functionality, with several other commands that will find AMI info, get stack status, build CloudFormation mappings, and many other features.
+AWS-CFN-Control provides an interface to quickly deploy and redeploy [AWS CloudFormation stacks](https://aws.amazon.com/cloudformation/). The `cfnctl` command provides the core functionality, with several other commands that will find AMI info, get stack status, build CloudFormation mappings, and other features. AWS-CFN-Control is very useful for CloudFormation templates that have parameters, and you want to create stacks with the same parameters in multiple regions, or you want to change just a few parameters values for a new stack.
 
 
 ## License
 
 This library is licensed under the Apache 2.0 License. 
 
+## Prerequisites
+
+It is assumed that you have an AWS account (preferably with admin privileges) and experience with CloudFormation. You will also need to be familiar with either [AWS Cloud Development Kit](https://aws.amazon.com/cdk/) (CDK) or writing your own CloudFormation templates. Either JSON or YAML formatted templates can be used. 
 
 ## Installation
 
@@ -15,14 +18,40 @@ This library is licensed under the Apache 2.0 License.
 pip install aws-cfn-control
 ```
 
-## Launch stack using a cfnctl configuration file
-
-TL;DR
+## TL;DR
 
 1. Build cfnctl parameters file
-2. Fill in values in the parameters file (in ~/.cfnparam)
-3. Launch the stack
-4. Check stack status and outputs
+1. Fill in values in the parameters file (located in dir ~/.cfnparam)
+1. Launch the stack
+1. Check stack status and outputs
+
+## Usage overview 
+
+#### Build the parameters file for a CloudFormation template:
+This command builds a default parameters file:
+
+```cfnctl build -t <template_file>```
+
+#### Create a stack using the template or a parameters file: 
+
+This first create command (using -t) first checks if there is an existing parameters file, and prompts if it should be used. Otherwise, a parameters file is created using the stack name (-n) appended to the template file name. You are then prompted for the stack parameters (similar to build action), and then the stack is created.
+
+```cfnctl create -n stack001 -t <template_file>```
+
+This second command (using -f) uses an existing parameters file, which has the template location, to create a stack. You will not be prompted for any parameters:
+
+```cfnctl create -n stack001 -f <parameters_file>```
+
+#### List all existing stacks 
+
+```cfnctl list```
+
+
+#### Delete a stack
+
+```cfnctl delete -n <stack_name>```
+
+## More detailed information
 
 ### Optional (but recommended) - Build cfnctl parameters file  (stored in ~/.cfnparam)
 

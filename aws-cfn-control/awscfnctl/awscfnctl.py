@@ -16,6 +16,7 @@ import os
 import sys
 import time
 import json
+import yaml
 import errno
 import boto3
 import operator
@@ -526,6 +527,7 @@ class CfnControl:
         :return:
         """
 
+
         response = None
 
         try:
@@ -543,12 +545,12 @@ class CfnControl:
                 self.template_url = template
                 self.validate_cfn_template(template_url=self.template_url)
                 if not cfn_param_file:
-                    cfn_param_file = self.build_cfn_param(stack_name, self.template_url, verbose=verbose)
+                    cfn_param_file = self.build_cfn_param(stack_name, self.template_url, cli_template=template, verbose=verbose)
             else:
                 template_path = os.path.abspath(template)
                 self.validate_cfn_template(template_body=template_path)
                 if not cfn_param_file:
-                    cfn_param_file = self.build_cfn_param(stack_name, template_path, verbose=verbose)
+                    cfn_param_file = self.build_cfn_param(stack_name, template_path, cli_template=template, verbose=verbose)
                 self.template_body = self.parse_cfn_template(template_path)
 
         cfn_params = self.read_cfn_param_file(cfn_param_file)
@@ -1067,8 +1069,9 @@ class CfnControl:
 
         return self.vpc_id
 
-    def build_cfn_param(self, stack_name, template, verbose=False):
+    def build_cfn_param(self, stack_name, template, cli_template=None, verbose=False):
 
+        command_line_template = cli_template
         template_url = None
         template_body = None
 
@@ -1087,7 +1090,8 @@ class CfnControl:
             if cli_val.lower().startswith("n"):
                 try:
                     if os.path.isfile(cfn_param_file):
-                        cli_val = input("Parameters (not default) file {0} already exists, use this file [y/N]:  ".format(cfn_param_file))
+                        if not os.path.isfile(cfn_param_file_default):
+                            cli_val = input("Parameters (not default) file {0} already exists, use this file [y/N]:  ".format(cfn_param_file))
 
                         if not cli_val:
                             cli_val = 'n'
@@ -1102,7 +1106,7 @@ class CfnControl:
                             # params file already built, nothing left to do here
                             return cfn_param_file
                     else:
-                        print('Stack config file does not exists, continuing...')
+                        print('Stack parameter file does not exists, continuing...')
                         self.cfn_param_file = cfn_param_file
                 except Exception as e:
                     raise(ValueError(e))
@@ -1158,7 +1162,21 @@ class CfnControl:
             template_body = template_path
             template_content = self.parse_cfn_template(template)
 
-        json_content = json.loads(template_content)
+        json_content = ""
+        try:
+            json_content = json.loads(template_content)
+        except json.decoder.JSONDecodeError:
+            try:
+                json_content = yaml.safe_load(template_content)
+            except Exception as e:
+                print(e)
+                print("Couldn't convert file {0} to JSON format".format(command_line_template))
+                print(" -> The template has be in either JSON or YAML format")
+                sys.exit()
+
+        if json_content == "":
+            print("Template file is blank, exiting...")
+            sys.exit()
 
         for p in sorted(json_content['Parameters']):
 
