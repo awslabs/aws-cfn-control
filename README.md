@@ -144,7 +144,7 @@ VPCId                               = vpc-5u5u235u
 ```
 
 
-### Launch the stack 
+### Create the stack 
 
 If you already created the parameters file (steps above), when you run the create command you will be prompted to choose from either the existing (default) parameters file, or continue the create while answering the parameters questions one at a time.
 
