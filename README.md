@@ -81,6 +81,33 @@ arguments:
   -v              Verbose config file
 ```
 
+### Using the defaults from CloudFormation templates and seeing existing resources
+
+When using the ```build``` or ```create``` actions, as you are prompted for each parameter you will be given the choice of choosing the default value specified in the template. For example, if you template has this:
+```text
+    "MyInstanceType": {
+      "Default": "m5.24xlarge",
+      "Description": "Instance type",
+      "Type": "String"
+    },
+```
+
+Your prompt will have the default value included, and you just hit entire to accept the default:
+```text
+MyInstanceType [m5.24xlarge]:
+```
+
+Additionally, some resources that are frequently used display the list of existing values. For example, here is what the list of subnets look like, with the default set to 'subnet-abc22221:
+```text
+Getting subnets for vpc-1234acde ...
+subnet-aaa111bbb222ccc33 | us-west-2-lax-1a | Local Zone Subnet
+subnet-abcd1111 | us-west-2b
+subnet-abcd2222 | us-west-2a
+subnet-abc33333 | us-west-2c
+subnet-abc44444 | us-west-2d
+Select subnet: [subnet-abcd2222]:
+```
+
 ### Optional (but recommended) - Build cfnctl parameters file  (stored in ~/.cfnparam)
 
 The build process accounts for default values, built-in lists, and will prompted on any Parameter that is using "ConstraintDescription" and does not have a value. It will be saved in the ~/.cfnparam directory with ".default" appended to the template name. For example, the parameter file for the template stack1.json, is ~/.cfnparam/stack1.json.default.

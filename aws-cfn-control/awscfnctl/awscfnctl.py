@@ -72,7 +72,7 @@ class CfnControl:
         if not self.region:
             self.region = self.session.region_name
 
-        print("Lools like we're in {0}".format(self.region))
+        print("Looks like we're in {0}".format(self.region))
 
         # boto resources
         self.s3 = self.session.resource('s3')
@@ -102,6 +102,7 @@ class CfnControl:
         self.template = None
         self.TemplateURL = None
         self.TemplateBody = None
+        self.vpc_variable_name = None
 
         # Set user directory and current directory
         #
@@ -116,6 +117,13 @@ class CfnControl:
         self.cfn_param_file_basename = None
         self.cfn_param_base_dir = ".cfnparam"
         self.cfn_param_file_dir = os.path.join(self.homedir, self.cfn_param_base_dir)
+
+        # Check for global defaults file
+        #
+        global_default_file = os.path.join(os.path.join(self.cfn_param_file_dir, self.region + ".default"))
+        if os.path.isfile(global_default_file):
+            self.global_default_file = global_default_file
+            print("Found global default file {0}".format(self.global_default_file))
 
         # Define other variables
         #
@@ -1037,7 +1045,9 @@ class CfnControl:
 
         sys.exit(1)
 
-    def set_vpc_cfn_param_file(self, cfn_param_file='NULL'):
+    def set_vpc_cfn_param_file(self, cfn_param_file='NULL', json_content=None, p=None ):
+
+        print(self.vpc_variable_name)
 
         if cfn_param_file == 'NULL':
             cfn_param_file = self.cfn_param_file
@@ -1059,8 +1069,9 @@ class CfnControl:
             except:
                 print('  {0} | {1} | {2}'.format(vpc_id, vpc_info['CidrBlock'], vpc_info['IsDefault']))
 
-        cli_val = input("Select VPC: ")
-        cli_val = cli_val.strip()
+        prompt_msg = "Select VPC"
+        cli_val = self.get_cli_value(json_content, self.vpc_variable_name, prompt_msg)
+
         if cli_val not in vpc_ids:
             print("Valid VPC required.  Exiting... ")
             self.rm_cfn_param_file(cfn_param_file)
@@ -1069,6 +1080,28 @@ class CfnControl:
         self.vpc_id = cli_val
 
         return self.vpc_id
+
+
+    def get_cli_value(self, json_content, p, prompt_msg):
+
+        cli_val = ""
+        default_val = ""
+        try:
+            default_val = json_content['Parameters'][p]['Default']
+        except KeyError:
+            pass
+
+        if default_val == "":
+            cli_val = input('{0}: '.format(prompt_msg))
+        else:
+            cli_val = input('{0} [{1}]: '.format(prompt_msg, default_val))
+
+        if cli_val == "":
+            cli_val = default_val
+
+        cli_val = cli_val.strip()
+        return cli_val
+
 
     def build_cfn_param(self, stack_name, template, cli_template=None, verbose=False):
 
@@ -1180,6 +1213,10 @@ class CfnControl:
             sys.exit()
 
         for p in sorted(json_content['Parameters']):
+            if json_content['Parameters'][p]['Type'] == 'AWS::EC2::VPC::Id':
+                self.vpc_variable_name=p
+
+        for p in sorted(json_content['Parameters']):
 
             default_val = None
             cli_val = None
@@ -1199,8 +1236,10 @@ class CfnControl:
                     #print('  {0}'.format(', '.join(self.key_pairs)))
                     for k in self.key_pairs:
                         print('  {0}'.format(k))
-                    cli_val = input("Select EC2 Key: ")
-                    cli_val = cli_val.strip()
+
+                    prompt_msg = "Select EC2 Key"
+                    cli_val = self.get_cli_value(json_content, p, prompt_msg)
+
                     if cli_val not in self.key_pairs:
                         print("Valid EC2 Key Pair required.  Exiting... ")
                         self.rm_cfn_param_file(cfn_param_file)
@@ -1213,7 +1252,7 @@ class CfnControl:
             try:
                 if json_content['Parameters'][p]['Type'] == 'AWS::EC2::VPC::Id':
                     if self.vpc_id is None:
-                        self.vpc_id = self.set_vpc_cfn_param_file(cfn_param_file)
+                        self.vpc_id = self.set_vpc_cfn_param_file(cfn_param_file,json_content=json_content,p=p)
                         cfn_param_file_to_write[p] = self.vpc_id
                         value_already_set.append(p)
                     else:
@@ -1230,7 +1269,7 @@ class CfnControl:
 
                     if self.vpc_id is None:
                         try:
-                            self.vpc_id = self.set_vpc_cfn_param_file(cfn_param_file)
+                            self.vpc_id = self.set_vpc_cfn_param_file(cfn_param_file,json_content=json_content,p=p)
                         except Exception as e:
                             raise ValueError(e)
 
@@ -1245,8 +1284,10 @@ class CfnControl:
                                                              subnet_info['Tag_Name'][0:20]))
                         except KeyError:
                             print('  {0} | {1}'.format(subnet_id, subnet_info['AvailabilityZone']))
-                    cli_val = input("Select subnet: ")
-                    cli_val = cli_val.strip()
+
+                    prompt_msg = "Select subnet:"
+                    cli_val = self.get_cli_value(json_content, p, prompt_msg)
+
                     if cli_val not in subnet_ids:
                         print("Valid subnet ID required.  Exiting... ")
                         self.rm_cfn_param_file(cfn_param_file)
@@ -1260,7 +1301,7 @@ class CfnControl:
 
                     if self.vpc_id is None:
                         try:
-                            self.vpc_id = self.set_vpc_cfn_param_file(cfn_param_file)
+                            self.vpc_id = self.set_vpc_cfn_param_file(cfn_param_file,json_content=json_content,p=p)
                         except Exception as e:
                             raise ValueError(e)
 
@@ -1272,8 +1313,8 @@ class CfnControl:
                     for r in all_security_group_info:
                         security_group_ids.append(r['GroupId'])
                         print('  {0} | {1}'.format(r['GroupId'], r['GroupName'][0:20]))
-                    cli_val = input('Select security group: ')
-                    cli_val = cli_val.strip()
+                    prompt_msg = "Select secuirty group"
+                    cli_val = self.get_cli_value(json_content, p, prompt_msg)
                     if cli_val not in security_group_ids:
                         print("Valid security group required.  Exiting... ")
                         self.rm_cfn_param_file(cfn_param_file)

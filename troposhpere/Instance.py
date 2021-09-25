@@ -62,7 +62,7 @@ def main():
         'EC2KeyName',
         Type="AWS::EC2::KeyPair::KeyName",
         Description="Name of an existing EC2 KeyPair to enable SSH access to the instance.",
-        ConstraintDescription="REQUIRED: Must be a valud EC2 key pair"
+        ConstraintDescription="REQUIRED: Must be a valud EC2 key pair",
     ))
 
     OperatingSystem = t.add_parameter(Parameter(
@@ -82,13 +82,13 @@ def main():
         'MyInstanceType',
         Type="String",
         Description="Instance type",
-        Default="m5.24xlarge",
+        Default="m5.2xlarge",
     ))
 
-    VPCId = t.add_parameter(Parameter(
-        'VPCId',
+    VpcId = t.add_parameter(Parameter(
+        'VpcId',
         Type="AWS::EC2::VPC::Id",
-        Description="VPC Id for this instance"
+        Description="VPC Id for this instance",
     ))
 
     Subnet = t.add_parameter(Parameter(
@@ -118,8 +118,8 @@ def main():
     SshAccessCidr = t.add_parameter(Parameter(
         'SshAccessCidr',
         Type="String",
-        Description="CIDR Block for SSH access, default 0.0.0.0/0",
-        Default="0.0.0.0/0",
+        Description="CIDR Block for SSH access, default 127.0.0.1/32",
+        Default="127.0.0.1/32",
         AllowedPattern="(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
         ConstraintDescription="Must be a valid CIDR x.x.x.x/x"
     ))
@@ -137,7 +137,7 @@ def main():
 
     SshSecurityGroup = t.add_resource(SecurityGroup(
         "SshSecurityGroup",
-        VpcId = Ref(VPCId),
+        VpcId = Ref(VpcId),
         GroupDescription = "SSH Secuirty group",
         SecurityGroupIngress=[
             ec2.SecurityGroupRule(
@@ -281,7 +281,7 @@ def main():
         )
     ])
 
-    #print(t.to_yaml())
+    ##print(t.to_yaml())
     print(t.to_json(indent=2))
 
 
