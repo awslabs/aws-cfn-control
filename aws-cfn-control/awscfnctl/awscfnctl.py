@@ -35,7 +35,7 @@ class CfnControl:
         """
         Main class init
 
-        :param kwords: aws_profile, region, asg, param_file, instances
+        :param kwords: aws_profile, region, asg, param_file, instances, cfn_action
 
             aws_profile:   If this is not given, then search
                              the session, otherwise use "default"
@@ -51,8 +51,11 @@ class CfnControl:
 
             instances:     list() of instances
 
+            cfn_action:    Action:  build|create|list|delete
 
         """
+
+        self.cfn_action = kwords.get('cfn_action')
 
         self.aws_profile = kwords.get('aws_profile')
         if not self.aws_profile:
@@ -1047,7 +1050,7 @@ class CfnControl:
 
     def set_vpc_cfn_param_file(self, cfn_param_file='NULL', json_content=None, p=None ):
 
-        print(self.vpc_variable_name)
+        ##print(self.vpc_variable_name)
 
         if cfn_param_file == 'NULL':
             cfn_param_file = self.cfn_param_file
@@ -1091,10 +1094,7 @@ class CfnControl:
         except KeyError:
             pass
 
-        if default_val == "":
-            cli_val = input('{0}: '.format(prompt_msg))
-        else:
-            cli_val = input('{0} [{1}]: '.format(prompt_msg, default_val))
+        cli_val = input('{0} [{1}]: '.format(prompt_msg, default_val))
 
         if cli_val == "":
             cli_val = default_val
@@ -1377,15 +1377,25 @@ class CfnControl:
                 except Exception as e:
                     print(e)
 
-            try:
-                if cli_val is None and default_val is None and json_content['Parameters'][p]['ConstraintDescription']:
-                    print('Parameter "{0}" is required, but can be changed in the cfnctl parameters file'.format(p))
-                    cli_val = input('Enter {0}: '.format(p))
-                    if cli_val == "":
-                        cli_val = "<VALUE_NEEDED>"
-                        found_required_val = True
-            except:
-                pass
+                try:
+                    if cli_val == "" and default_val == "" and json_content['Parameters'][p]['ConstraintDescription']:
+                        if self.cfn_action == "build":
+                            print(' WARNING ONLY: Parameter "{0}" is required but can be updated in '
+                                  'parameters file and left empty for now'.format(p))
+                        elif self.cfn_action == "create":
+                            print(' REQUIREMENT: Parameter "{0}" is required to create the stack, please enter a value,'
+                                  ' optionally exit create and rerun with build action'.format(p))
+
+                        cli_val = input('{0}: '.format(p))
+                        if cli_val == "":
+                            if self.cfn_action == "build":
+                                cli_val = "<VALUE_NEEDED>"
+                                found_required_val = True
+                            else:
+                                print("Required parameter {0} not entered. The stack create will fail, but the "
+                                      "parameters file will still be built.".format(p))
+                except:
+                    pass
 
             try:
                 if p not in value_already_set:

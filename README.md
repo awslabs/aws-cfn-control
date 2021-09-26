@@ -83,7 +83,7 @@ arguments:
 
 ### Using the defaults from CloudFormation templates and seeing existing resources
 
-When using the ```build``` or ```create``` actions, as you are prompted for each parameter you will be given the choice of choosing the default value specified in the template. For example, if you template has this:
+When using the ```build``` or ```create``` actions, as you are prompted for each parameter you will be given the choice of choosing the default value specified in the template. For example, if your template has this:
 ```text
     "MyInstanceType": {
       "Default": "m5.24xlarge",
@@ -97,7 +97,9 @@ Your prompt will have the default value included, and you just hit entire to acc
 MyInstanceType [m5.24xlarge]:
 ```
 
-Additionally, some resources that are frequently used display the list of existing values. For example, here is what the list of subnets look like, with the default set to 'subnet-abc22221:
+#### Existing resources
+
+Additionally, resources that are frequently used, will list the existing values. For example, here is what the list of subnets look like, with the default set to ```subnet-abc22221```:
 ```text
 Getting subnets for vpc-1234acde ...
 subnet-aaa111bbb222ccc33 | us-west-2-lax-1a | Local Zone Subnet
@@ -108,9 +110,19 @@ subnet-abc44444 | us-west-2d
 Select subnet: [subnet-abcd2222]:
 ```
 
+#### Required parameters
+
+If a parameter is defined as required in the template, you will see a message similar to this:
+
+```text
+
+```
+
 ### Optional (but recommended) - Build cfnctl parameters file  (stored in ~/.cfnparam)
 
-The build process accounts for default values, built-in lists, and will prompted on any Parameter that is using "ConstraintDescription" and does not have a value. It will be saved in the ~/.cfnparam directory with ".default" appended to the template name. For example, the parameter file for the template stack1.json, is ~/.cfnparam/stack1.json.default.
+The build process accounts for default values, built-in lists, and will prompted on any Parameter that is using "ConstraintDescription" and does not have a value. It will be saved in the ```~/.cfnparam directory``` with ```.default``` appended to the template name. For example, the default parameter file for the template named ```stack1.json```, is ```~/.cfnparam/stack1.json.default```.
+
+Here is an example of running the ```cfnctl build``` command:
 
 ```
 $ cfnctl build -t stack1.json
@@ -119,13 +131,12 @@ Using config file /Users/joeuser/.cfnparam/stack1.json.default
 EC2 keys found in us-east-1:
   Jouser_IAD
 Select EC2 Key: Jouser_IAD
-Parameter "SSHBucketName" is required, but can be changed in config file
-Enter SSHBucketName: jouser-keys
+SSHBucketName: jouser-cfn-templates
 Getting security groups...
   sg-1234asdf | default
   sg-2345aslf | My-IPs
   sg-12823fas | aws-cloud9-Dev1-IAD-
-Enter valid security group: sg-1234asdf
+Select security group: sg-1234asdf
 Getting VPC info...
   vpc-5u5u235u | 10.0.0.0/16 | False | Private VPC 1
   vpc-214u4u33 | 172.31.0.0/16 | True | Default VPC

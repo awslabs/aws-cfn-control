@@ -70,13 +70,14 @@ def main():
     ls_stacks = False
     build_param_file = False
 
-    if args.cfn_action == "create":
+    cfn_action = args.cfn_action
+    if cfn_action == "create":
         create_stack = True
-    elif args.cfn_action == "delete":
+    elif cfn_action == "delete":
         del_stack = True
-    elif args.cfn_action == "list":
+    elif cfn_action == "list":
         ls_stacks = True
-    elif args.cfn_action == "build":
+    elif cfn_action == "build":
         build_param_file = True
     else:
         print('Action has to be "build|create|list|delete"')
@@ -103,7 +104,7 @@ def main():
     if args.no_rollback:
         rollback = 'DO_NOTHING'
 
-    client = CfnControl(region=region, aws_profile=aws_profile)
+    client = CfnControl(region=region, aws_profile=aws_profile, cfn_action=cfn_action)
 
     if ls_all_stack_info or ls_stacks:
         if ls_all_stack_info and ls_stacks:
@@ -188,6 +189,8 @@ if __name__ == "__main__":
         sys.exit(main())
     except KeyboardInterrupt:
         print('\nReceived Keyboard interrupt.')
+        print('Exiting...')
+    except SystemExit:
         print('Exiting...')
     except ValueError as e:
         print('ERROR: {0}'.format(e))
