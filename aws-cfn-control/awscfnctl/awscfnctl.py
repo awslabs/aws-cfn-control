@@ -121,12 +121,13 @@ class CfnControl:
         self.cfn_param_base_dir = ".cfnparam"
         self.cfn_param_file_dir = os.path.join(self.homedir, self.cfn_param_base_dir)
 
-        # Check for global defaults file
-        #
-        global_default_file = os.path.join(os.path.join(self.cfn_param_file_dir, self.region + ".default"))
-        if os.path.isfile(global_default_file):
-            self.global_default_file = global_default_file
-            print("Found global default file {0}".format(self.global_default_file))
+        ## For future release
+        ## Check for global defaults file
+        ##
+        #global_default_file = os.path.join(os.path.join(self.cfn_param_file_dir, self.region + ".default"))
+        #if os.path.isfile(global_default_file):
+        #    self.global_default_file = global_default_file
+        #    print("Found global default file {0}".format(self.global_default_file))
 
         # Define other variables
         #
@@ -570,13 +571,13 @@ class CfnControl:
         try:
             if self.cfn_param_file_values['TemplateURL']:
                 self.template_url = self.cfn_param_file_values['TemplateURL']
-                print("Using template from URL {}".format(self.template_url))
+                print("Using template from URL: {}".format(self.template_url))
         except Exception as e:
             if "TemplateURL" in str(e):
                 try:
                     if self.cfn_param_file_values['TemplateBody']:
                         self.template_body = self.cfn_param_file_values['TemplateBody']
-                        print("Using template file {}".format(self.template_body))
+                        print("Using template file: {}".format(self.template_body))
                         self.template_body = self.parse_cfn_template(self.template_body)
                 except Exception as e:
                     raise ValueError(e)
@@ -1140,7 +1141,7 @@ class CfnControl:
                             # params file already built, nothing left to do here
                             return cfn_param_file
                     else:
-                        print('Stack parameter file does not exists, continuing...')
+                        print('Stack parameters file does not exists, continuing...')
                         self.cfn_param_file = cfn_param_file
                 except Exception as e:
                     raise(ValueError(e))

@@ -28,7 +28,7 @@ def open_file(fname):
     return open(os.path.join(os.path.dirname(__file__), fname))
 
 
-_version = "1.0.2"
+_version = "1.0.3"
 
 console_scripts = [ 'cfnctl = awscfnctl.cfnctl:main',
                     'getamiinfo = awscfnctl.getamiinfo:main',

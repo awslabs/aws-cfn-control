@@ -1,7 +1,7 @@
 # AWS CFN Control [![Build Status](https://api.travis-ci.org/awslabs/aws-cfn-control.png?branch=master)](https://travis-ci.org/awslabs/aws-cfn-control) [![PyPi Status](https://badge.fury.io/py/aws-cfn-control.png)](https://badge.fury.io/py/aws-cfn-control)
 
 
-AWS-CFN-Control provides an interface to quickly deploy and redeploy [AWS CloudFormation stacks](https://aws.amazon.com/cloudformation/). The `cfnctl` command provides the core functionality, with several other commands that will find AMI info, get stack status, build CloudFormation mappings, and other features. AWS-CFN-Control is very useful for CloudFormation templates that have parameters, and you want to create stacks with the same parameters in multiple regions, or you want to change just a few parameters values for a new stack.
+AWS-CFN-Control provides a command line interface to quickly deploy and redeploy [AWS CloudFormation stacks](https://aws.amazon.com/cloudformation/). The `cfnctl` command provides the core functionality, with several other commands that will find AMI info, get stack status, build CloudFormation mappings, and other features. AWS-CFN-Control is very useful for CloudFormation templates that have parameters, and you want to create stacks with the same parameters in multiple regions, or you want to change just a few parameters values for a new stack.
 
 
 ## License
@@ -10,7 +10,7 @@ This library is licensed under the Apache 2.0 License.
 
 ## Prerequisites
 
-It is assumed that you have an AWS account (preferably with admin privileges) and experience with CloudFormation. You will also need to be familiar with either [AWS Cloud Development Kit](https://aws.amazon.com/cdk/) (CDK) or writing your own CloudFormation templates. Either JSON or YAML formatted templates can be used. 
+It is assumed that you have an AWS account (preferably with admin privileges) and experience with CloudFormation. You will also need to be familiar with either [AWS Cloud Development Kit](https://aws.amazon.com/cdk/) (CDK) or writing your own CloudFormation templates. Although JSON or YAML formatted templates can be used, JSON is recommended. 
 
 ## Installation
 
@@ -21,7 +21,6 @@ pip install aws-cfn-control
 ## TL;DR
 
 1. Build cfnctl parameters file
-1. Fill in values in the parameters file (located in dir ~/.cfnparam)
 1. Launch the stack
 1. Check stack status and outputs
 
@@ -99,172 +98,212 @@ MyInstanceType [m5.24xlarge]:
 
 #### Existing resources
 
-Additionally, resources that are frequently used, will list the existing values. For example, here is what the list of subnets look like, with the default set to ```subnet-abc22221```:
+For some resources, a list of existing values will be shown. For example, here is what the list of subnets look like, with the default set to ```subnet-abbbcccbbbbcd1235```:
+
 ```text
-Getting subnets for vpc-1234acde ...
-subnet-aaa111bbb222ccc33 | us-west-2-lax-1a | Local Zone Subnet
-subnet-abcd1111 | us-west-2b
-subnet-abcd2222 | us-west-2a
-subnet-abc33333 | us-west-2c
-subnet-abc44444 | us-west-2d
-Select subnet: [subnet-abcd2222]:
+Getting subnets for vpc-0000aaaa1111bbbb2 ...
+  subnet-aaaabbbcccbcd1234 | us-east-1b
+  subnet-abbbcccbbbbcd12gg | us-east-1-bos-1a | Local Zone Subnet
+  subnet-abbbcccbbbbcd1235 | us-east-1a
+  subnet-addddbbbccbcd1232 | us-east-1f
+  subnet-addddbbbccbcd1236 | us-east-1c
+  subnet-addddbbbccbcd1238 | us-east-1e
+  subnet-aaabbbbcccbcd1237 | us-east-1d
+Select subnet: [subnet-abbbcccbbbbcd1235]: 
 ```
 
 #### Required parameters
 
-If a parameter is defined as required in the template, you will see a message similar to this:
+If a parameter is defined as required (```ConstraintDescription``` is used in the template), and you have not provided a value, you will see one of two messages.
+
+1. If you ran ```cfnctl build``` you will see a message similar to this:
 
 ```text
-
+WARNING ONLY: Parameter "MyS3Bucket" is required but can be updated in parameters file and left empty for now
 ```
 
-### Optional (but recommended) - Build cfnctl parameters file  (stored in ~/.cfnparam)
+2. If you ran ```cfnctl create``` you will see a message similar this:
+```text
+MyS3Bucket []: 
+ REQUIREMENT: Parameter "MyS3Bucket" is required to create the stack, please enter a value, optionally exit create and rerun with build action
+MyS3Bucket: 
+Required parameter MyS3Bucket not entered. The stack create will fail, but the parameters file will still be built.
+```
 
-The build process accounts for default values, built-in lists, and will prompted on any Parameter that is using "ConstraintDescription" and does not have a value. It will be saved in the ```~/.cfnparam directory``` with ```.default``` appended to the template name. For example, the default parameter file for the template named ```stack1.json```, is ```~/.cfnparam/stack1.json.default```.
+After the build completes you will see this message, reminding you to update the value in the parameters file:
+
+```text
+Some values are still needed, replace "<VALUE_NEEDED>" in /Users/joeuser/.cfnparam/My_Instance.json.default
+```
+
+In the parameters file you will see this, for ```MyS3Bucket```:
+
+```text
+MyS3Bucket                          = <VALUE_NEEDED>
+```
+
+You will need to change ```<VALUE_NEEDED>``` to a valid parameter to create the stack successfully.
+
+
+
+### Optional (but recommended): Build cfnctl parameters file  (stored in ~/.cfnparam/)
+
+When you run ```cfnctl build``` you will be prompted for each of the parameter values. The ```build``` process accounts for default values, and you will be double prompted on any parameter that is using ```ConstraintDescription``` and does not have a value. A file with parameters and the template location will be saved in the ```~/.cfnparam/``` directory with ```.default``` appended to the template name. For example, the default parameter file for the template named ```stack1.json```, is ```~/.cfnparam/stack1.json.default```.
 
 Here is an example of running the ```cfnctl build``` command:
 
-```
-$ cfnctl build -t stack1.json
-Creating config file /Users/joeuser/.cfnparam/stack1.json.default
-Using config file /Users/joeuser/.cfnparam/stack1.json.default
+```text
+$ cfnctl build -t My_Instance.json                   
+Using AWS credentials profile "default"
+Looks like we're in us-east-1
+Creating parameters file /Users/joeuser/.cfnparam/My_Instance.json.default
 EC2 keys found in us-east-1:
-  Jouser_IAD
-Select EC2 Key: Jouser_IAD
-SSHBucketName: jouser-cfn-templates
-Getting security groups...
-  sg-1234asdf | default
-  sg-2345aslf | My-IPs
-  sg-12823fas | aws-cloud9-Dev1-IAD-
-Select security group: sg-1234asdf
+  Testing1 
+  Joeuser_IAD 
+Select EC2 Key [Joeuser_IAD]: 
 Getting VPC info...
-  vpc-5u5u235u | 10.0.0.0/16 | False | Private VPC 1
-  vpc-214u4u33 | 172.31.0.0/16 | True | Default VPC
-Select VPC: vpc-5u5u235u
-Getting subnets from vpc-5u5u235u...
-  subnet-123ljias | us-east-1a | Default 1a
-  subnet-a2939jis | us-east-1d | Default 1d
-  subnet-er395948 | us-east-1f | Default 1f
-  subnet-1243jjsa | us-east-1b | Default 1b
-  subnet-jasdfj23 | us-east-1e | Default 1e
-  subnet-asdfeirj | us-east-1c | Default 1c
-Select subnet: subnet-123ljias
-...
+  vpc-0000aaaa1111bbbb2 | 10.0.0.0/16 | False | test1-VPC
+  vpc-aaaabbbbeebce1234 | 172.31.0.0/16 | True | default-vpc
+Select VPC [vpc-aaaabbbbeebce1234]: vpc-0000aaaa1111bbbb2 
+Getting security groups for vpc-0000aaaa1111bbbb2 ...
+  sg-1111aaaa3333bbbbcc | launch-wizard-1
+  sg-2222bbbbcccc333334 | Ent-network
+  sg-bbbccaa1234124efgh | default
+Select secuirty group [sg-bbbccaa1234124efgh]: 
+MyInstanceType [m5.2xlarge]:  t3.small 
+OperatingSystem [centos7]:  alinux2
+SshAccessCidr [111.222.333.444/32]:  333.333.444.444/32 
+MyS3Bucket []: 
+ WARNING ONLY: Parameter "MyS3Bucket" is required but can be updated in parameters file and left empty for now
+MyS3Bucket: 
+Getting subnets for vpc-0000aaaa1111bbbb2 ...
+  subnet-aaaabbbcccbcd1234 | us-east-1b
+  subnet-abbbcccbbbbcd12gg | us-east-1-bos-1a | Local Zone Subnet
+  subnet-abbbcccbbbbcd1235 | us-east-1a
+  subnet-addddbbbccbcd1232 | us-east-1f
+  subnet-addddbbbccbcd1236 | us-east-1c
+  subnet-addddbbbccbcd1238 | us-east-1e
+  subnet-aaabbbbcccbcd1237 | us-east-1d
+Select subnet: [subnet-abbbcccbbbbcd1235]: 
+UsePublicIp [true]: 
+Some values are still needed, replace "<VALUE_NEEDED>" in /Users/joeuser/.cfnparam/My_Instance.json.default
+Done building cfnctl parameters file /Users/joeuser/.cfnparam/My_Instance.json.default, includes template location
 ```
 
 #### Edit the parameters file, and fill in values as needed 
 
-In your home directory under ~/.cfnparam, you will find a parameters file. Edit the parameters file as needed, if you see "<VALUE_NEEDED>", those values can not be null for successful stack luanch.
+After running the ```cfnctl build```, in your home directory under ```~/.cfnparam/```, you will find a parameters file. Edit the parameters file as needed, if you see ```<VALUE_NEEDED>```, those values can not be null for a successful stack luanch.
 
 Example parameters file:
 
-```
+```text
 [AWS-Config]
-TemplateUrl = /Users/joeuser/stack1.json
+TemplateBody = /Users/joeuser/templates/My_Instance.json 
 
 [Paramters]
-ASG01ClusterSize                    = 2
-ASG01InstanceType                   = c4.8xlarge
-ASG01MaxClusterSize                 = 2
-ASG01MinClusterSize                 = 0
-AdditionalBucketName                =
-CreateElasticIP                     = True
-EC2KeyName                          = Joeuser_IAD
-EfsId                               =
-OperatingSystem                     = alinux
-SSHBucketName                       = jouser-keys
-SSHClusterKeyPriv                   = id_rsa
-SSHClusterKeyPub                    = id_rsa.pub
-SecurityGroups                      = sg-1234asdf
-Subnet                              = subnet-123ljias
-UsePublicIp                         = True
-VPCId                               = vpc-5u5u235u
+EC2KeyName                          = Joeuser_IAD 
+ExistingSecurityGroup               = sg-bbbccaa1234124efgh 
+MyInstanceType                      = t3.small
+OperatingSystem                     = alinux2 
+SshAccessCidr                       = 333.333.444.444/32 
+SshBucket                           = <VALUE_NEEDED>
+Subnet                              = subnet-abbbcccbbbbcd1235 
+UsePublicIp                         = true
+VpcId                               = vpc-aaaabbbbeebce1234 
 ```
 
 
 ### Create the stack 
 
-If you already created the parameters file (steps above), when you run the create command you will be prompted to choose from either the existing (default) parameters file, or continue the create while answering the parameters questions one at a time.
+The stack can be created in two ways, either with the ```-t``` flag or the ```-f``` flag
+
+#### 1. Create with the ```-t``` flag
+
+If you already created the parameters file (steps above), when you run the create command you will be prompted to choose from either the existing (default) parameters file, or continue the create while answering the parameters questions again.
 
 For example, if the default parameters file exists you will see this:
 
 ```
-$ cfnctl create -n teststack1 -t stack1.json 
+$ cfnctl create -n teststack1 -t My_Instance.json
 Using AWS credentials profile "default"
-Lools like we're in us-east-1
-Default parameters file /Users/joeuser/.cfnparam/stack1.json.default exists, use this file [Y/n]:
+Looks like we're in us-east-1
+Default parameters file /Users/joeuser/.cfnparam/My_Instance.json.default exists, use this file [Y/n]:  
 ```
-Answering "y" will create the stack using the values from the previously created default parameters file. Otherwise, you will be prompted for each parameter, and the parameters will be saved in the ~/.cfnparam directory with values used to create the stack with the stack name appended to the template name. 
+Answering "y" will create the stack using the values from the previously created default parameters file. 
 
-For example, the parameter file for the template stack1.json using the stack name "teststack1", will be ~/.cfnparam/stack1.json.teststack1:
+If you answer "n", you will be prompted for each parameter, and the parameters will be saved in the ```~/.cfnparam/``` directory with the values used to create the stack. The parameters file name is the stack name appended to the template file name. For example, the parameters file for the template named ```My_Instance.json``` when specifying the stack name ```teststack1```, will be ```~/.cfnparam/My_Instance.json.teststack1```:
 
-```
-$ cfnctl create -n teststack1 -t stack1.json
+```text
+$ cfnctl create -n teststack1 -t My_Instance.json
 Using AWS credentials profile "default"
-Lools like we're in us-east-1
-Default parameters file /Users/joeuser/.cfnparam/stack1.json.default exists, use this file [Y/n]: n
-Stack config file does not exists, continuing...
-Creating parameters file /Users/joeuser/.cfnparam/stack1.json.teststack1
+Looks like we're in us-east-1
+Default parameters file /Users/joeuser/.cfnparam/My_Instance.json.default exists, use this file [Y/n]: n
+Stack parameters file does not exists, continuing...
+Creating parameters file /Users/joeuser/.cfnparam/My_Instance.json.teststack1
 ...
 ```
 
-You can use any parameters file (using -f) to create a stack, as it has the template location and paramters in the file. 
+#### 2. Create with the ```-f``` flag
 
-For example, to create a new stack (teststack2) using the parameters from the stack named "teststack1", you run this: 
+You can use any parameters file (using ```-f```) to create a stack, as the parameters file has the template location and the paramters.
 
-```
-$ cfnctl create -n teststack2 -f ~/.cfnparam/stack1.json.teststack1
-```
-
-Here is example output from a create, using a previously created default parameters file:
+For example, to create a new stack (teststack2) using all the parameters from the previously created stack named ```teststack1```, you run this: 
 
 ```
-$ cfnctl create -n teststack1 -t stack1.json 
+$ cfnctl create -n teststack2 -f ~/.cfnparam/My_Instance.json.teststack1
+```
+
+#### Example ```cfnctl create``` using the default parameters file (from ```cfnctl build```):
+
+Here is example output from a ```cfnctl create```, using the previously created default parameters file. The status of the stack, the parameters used, and the output(s) are also displayed:
+
+```
+$ cfnctl create -n teststack1 -t My_Instance.json
 Using AWS credentials profile "default"
-Lools like we're in us-east-1
-Default parameters file /Users/joeuser/.cfnparam/stack1.json.default exists, use this file [Y/n]: y
-Using parameters file: /Users/jouser/.cfnparam/stack1.json.default
-teststack1                     :  CREATE_IN_PROGRESS
-RootRole                       :  CREATE_IN_PROGRESS
-PlacementGroup                 :  CREATE_IN_PROGRESS
-EIPAddress                     :  CREATE_COMPLETE
-RootRole                       :  CREATE_COMPLETE
-RootInstanceProfile            :  CREATE_IN_PROGRESS
-RootInstanceProfile            :  CREATE_COMPLETE
-ASG01LaunchConfiguration       :  CREATE_IN_PROGRESS
-ASG01LaunchConfiguration       :  CREATE_COMPLETE
-AutoScalingGroup01             :  CREATE_IN_PROGRESS
-AutoScalingGroup01             :  CREATE_IN_PROGRESS
-AutoScalingGroup01             :  CREATE_COMPLETE
-teststack1                     :  CREATE_COMPLETE
-```
+Looks like we're in us-east-1
+Default parameters file /Users/joeuser/.cfnparam/My_Instance.json.default exists, use this file [Y/n]:  
+Using parameters file: /Users/joeuser/.cfnparam/My_Instance.json.default 
+Using template file: /Users/joeuser/templates/My_Instance.json 
+Attempting to launch teststack1 
+teststack1                             :  CREATE_IN_PROGRESS        :  User Initiated
+SshSecurityGroup                       :  CREATE_IN_PROGRESS       
+InstanceWaitHandle                     :  CREATE_IN_PROGRESS       
+RootRole                               :  CREATE_IN_PROGRESS       
+InstanceWaitHandle                     :  CREATE_IN_PROGRESS        :  Resource creation Initiated
+InstanceWaitHandle                     :  CREATE_COMPLETE          
+RootRole                               :  CREATE_IN_PROGRESS        :  Resource creation Initiated
+SshSecurityGroup                       :  CREATE_IN_PROGRESS        :  Resource creation Initiated
+SshSecurityGroup                       :  CREATE_COMPLETE          
+RootRole                               :  CREATE_COMPLETE          
+RootInstanceProfile                    :  CREATE_IN_PROGRESS       
+RootInstanceProfile                    :  CREATE_IN_PROGRESS        :  Resource creation Initiated
+RootInstanceProfile                    :  CREATE_COMPLETE          
+MyInstance                             :  CREATE_IN_PROGRESS       
+MyInstance                             :  CREATE_IN_PROGRESS        :  Resource creation Initiated
+MyInstance                             :  CREATE_COMPLETE          
+InstanceWaitCondition                  :  CREATE_IN_PROGRESS       
+InstanceWaitCondition                  :  CREATE_IN_PROGRESS        :  Resource creation Initiated
+InstanceWaitCondition                  :  CREATE_COMPLETE          
+teststack1                             :  CREATE_COMPLETE          
 
-### Check stack status and outputs
+Status:
+teststack1                               2021-09-16 14:35:11   CREATE_COMPLETE                test instance launch
 
-After the creation is finished, the parameters and outputs are printed out:
-
-```
 [Parameters]
-OperatingSystem                     = alinux
-SSHClusterKeyPriv                   = id_rsa
-ASG01InstanceType                   = c4.8xlarge
-SSHClusterKeyPub                    = id_rsa.pub
-SecurityGroups                      = sg-1234asdf
-ASG01ClusterSize                    = 2
-VPCId                               = vpc-5u5u235u
-CreateElasticIP                     = True
-ASG01MaxClusterSize                 = 2
-AdditionalBucketName                =
-EfsId                               =
-SSHBucketName                       = jouser-keys
-ASG01MinClusterSize                 = 0
-UsePublicIp                         = True
-EC2KeyName                          = Jouser_IAD
-Subnet                              = subnet-123ljias
+ExistingSecurityGroup                  = sg-bbbccaa1234124efgh 
+OperatingSystem                        = alinux2 
+VpcId                                  = vpc-aaaabbbbeebce1234 
+UsePublicIp                            = true                          
+SshAccessCidr                          = 333.333.444.444/32 
+EC2KeyName                             = Joeuser_IAD 
+MyInstanceType                         = t3.small 
+Subnet                                 = subnet-abbbcccbbbbcd1235 
 
 [Outputs]
-ElasticIP                           = 109.234.22.45
-
+InstanceID                             = i-00011100022200333
+InstancePublicIP                       = 54.12.11.13 
+InstancePrivateIP                      = 172.25.5.5
 ```
+
 
 
