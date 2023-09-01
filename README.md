@@ -1,5 +1,4 @@
-# AWS CFN Control [![Build Status](https://api.travis-ci.org/awslabs/aws-cfn-control.png?branch=master)](https://travis-ci.org/awslabs/aws-cfn-control) [![PyPi Status](https://badge.fury.io/py/aws-cfn-control.png)](https://badge.fury.io/py/aws-cfn-control)
-
+# AWS CFN Control [![Build Status](https://app.travis-ci.com/awslabs/aws-cfn-control.svg?branch=master)](https://travis-ci.org/awslabs/aws-cfn-control) [![PyPi Status](https://badge.fury.io/py/aws-cfn-control.png)](https://badge.fury.io/py/aws-cfn-control)
 
 AWS-CFN-Control provides a command line interface to quickly deploy and redeploy [AWS CloudFormation stacks](https://aws.amazon.com/cloudformation/). The `cfnctl` command provides the core functionality, with several other commands that will find AMI info, get stack status, build CloudFormation mappings, and other features. AWS-CFN-Control is very useful for CloudFormation templates that have parameters, and you want to create stacks with the same parameters in multiple regions, or you want to change just a few parameters values for a new stack.
 
