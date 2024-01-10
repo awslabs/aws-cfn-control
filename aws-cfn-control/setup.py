@@ -28,7 +28,7 @@ def open_file(fname):
     return open(os.path.join(os.path.dirname(__file__), fname))
 
 
-_version = "1.0.5"
+_version = "1.0.6"
 
 console_scripts = [ 'cfnctl = awscfnctl.cfnctl:main',
                     'getamiinfo = awscfnctl.getamiinfo:main',
@@ -54,7 +54,7 @@ setup(
     zip_safe=False,
     include_package_data=True,
     install_requires=[
-        'pyyaml',
+        'cfn-flip',
         'boto3>=1.4.7',
     ],
     packages=find_packages(),

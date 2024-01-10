@@ -16,7 +16,6 @@ import os
 import sys
 import time
 import json
-import yaml
 import errno
 import boto3
 import operator
@@ -26,6 +25,7 @@ import configparser
 from urllib.parse import urlparse
 from botocore.exceptions import ClientError
 from botocore.exceptions import EndpointConnectionError
+from cfn_flip import flip, to_yaml, to_json
 
 
 class CfnControl:
@@ -1202,7 +1202,7 @@ class CfnControl:
             json_content = json.loads(template_content)
         except json.decoder.JSONDecodeError:
             try:
-                json_content = yaml.safe_load(template_content)
+                json_content = json.loads(to_json(template_content))
             except Exception as e:
                 print(e)
                 print("Couldn't convert file {0} to JSON format".format(command_line_template))
