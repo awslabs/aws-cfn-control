@@ -477,6 +477,8 @@ class CfnControl:
                 os.path.join(self.cfn_param_file_dir, cfn_param_file))
             )
             parser.read(os.path.join(self.cfn_param_file_dir, cfn_param_file))
+        elif cfn_param_file == "NO_PARAM_FILE":
+            return None
         else:
             errmsg = "Config file {0} not found".format(cfn_param_file)
             raise ValueError(errmsg)
@@ -568,72 +570,116 @@ class CfnControl:
         cfn_params = self.read_cfn_param_file(cfn_param_file)
         self.cfn_param_file = cfn_param_file
 
-        try:
-            if self.cfn_param_file_values['TemplateURL']:
-                self.template_url = self.cfn_param_file_values['TemplateURL']
-                print("Using template from URL: {}".format(self.template_url))
-        except Exception as e:
-            if "TemplateURL" in str(e):
-                try:
-                    if self.cfn_param_file_values['TemplateBody']:
-                        self.template_body = self.cfn_param_file_values['TemplateBody']
-                        print("Using template file: {}".format(self.template_body))
-                        self.template_body = self.parse_cfn_template(self.template_body)
-                except Exception as e:
-                    raise ValueError(e)
-            else:
-                raise ValueError(e)
-
         print("Attempting to launch {}".format(stack_name))
 
-        try:
+        if self.cfn_param_file == "NO_PARAM_FILE":
+            # there is no parameters file (cfn_param_fie == "NO_PARAM_FILE")
+            cfn_param_file_location = self.cfn_param_file 
 
-            if self.template_url:
+            try:
+                if self.template_url:
+                    response = self.client_cfn.create_stack(
+                        StackName=stack_name,
+                        TemplateURL=self.template_url,
+                        TimeoutInMinutes=600,
+                        Capabilities=['CAPABILITY_IAM'],
+                        OnFailure=set_rollback,
+                        Tags=[
+                            {
+                                'Key': 'Name',
+                                'Value': stack_name
+                            },
+                            {
+                                'Key': 'cfnctl_param_file',
+                                'Value': cfn_param_file_location 
+                            },
+                        ]
+                    )
+                elif self.template_body:
+                    response = self.client_cfn.create_stack(
+                        StackName=stack_name,
+                        TemplateBody=self.template_body,
+                        TimeoutInMinutes=600,
+                        Capabilities=['CAPABILITY_IAM'],
+                        OnFailure=set_rollback,
+                        Tags=[
+                            {
+                                'Key': 'Name',
+                                'Value': stack_name
+                            },
+                            {
+                                'Key': 'cfnctl_param_file',
+                                'Value': cfn_param_file_location 
+                            },
+                        ]
+                    )
+            except ClientError as e:
+                print(e.response['Error']['Message'])
+                return
 
-                response = self.client_cfn.create_stack(
-                    StackName=stack_name,
-                    TemplateURL=self.template_url,
-                    Parameters=cfn_params,
-                    TimeoutInMinutes=600,
-                    Capabilities=['CAPABILITY_IAM'],
-                    OnFailure=set_rollback,
-                    Tags=[
-                           {
-                               'Key': 'Name',
-                               'Value': stack_name
-                           },
-                           {
-                               'Key': 'cfnctl_param_file',
-                               'Value': os.path.basename(self.cfn_param_file)
-                           },
-                    ]
-                )
+        else:
+            # The parameters file exists
+            try:
+                if self.cfn_param_file_values['TemplateURL']:
+                    self.template_url = self.cfn_param_file_values['TemplateURL']
+                    print("Using template from URL: {}".format(self.template_url))
+            except Exception as e:
+                if "TemplateURL" in str(e):
+                    try:
+                        if self.cfn_param_file_values['TemplateBody']:
+                            self.template_body = self.cfn_param_file_values['TemplateBody']
+                            print("Using template file: {}".format(self.template_body))
+                            self.template_body = self.parse_cfn_template(self.template_body)
+                    except Exception as e:
+                        raise ValueError(e)
+                else:
+                    raise ValueError(e)
+            
+            cfn_param_file_location = os.path.basename(self.cfn_param_file)
 
-            elif self.template_body:
-
-                response = self.client_cfn.create_stack(
-                    StackName=stack_name,
-                    TemplateBody=self.template_body,
-                    Parameters=cfn_params,
-                    TimeoutInMinutes=600,
-                    Capabilities=['CAPABILITY_IAM'],
-                    OnFailure=set_rollback,
-                    Tags=[
-                           {
-                               'Key': 'Name',
-                               'Value': stack_name
-                           },
-                           {
-                               'Key': 'cfnctl_param_file',
-                               'Value': os.path.basename(self.cfn_param_file)
-                           },
-                    ]
-                )
-
-        except ClientError as e:
-            print(e.response['Error']['Message'])
-            return
-
+            try:
+                if self.template_url:
+                    response = self.client_cfn.create_stack(
+                        StackName=stack_name,
+                        TemplateURL=self.template_url,
+                        Parameters=cfn_params,
+                        TimeoutInMinutes=600,
+                        Capabilities=['CAPABILITY_IAM'],
+                        OnFailure=set_rollback,
+                        Tags=[
+                            {
+                                'Key': 'Name',
+                                'Value': stack_name
+                            },
+                            {
+                                'Key': 'cfnctl_param_file',
+                                'Value': cfn_param_file_location 
+                            },
+                        ]
+                    )
+                elif self.template_body:
+                    response = self.client_cfn.create_stack(
+                        StackName=stack_name,
+                        TemplateBody=self.template_body,
+                        Parameters=cfn_params,
+                        TimeoutInMinutes=600,
+                        Capabilities=['CAPABILITY_IAM'],
+                        OnFailure=set_rollback,
+                        Tags=[
+                            {
+                                'Key': 'Name',
+                                'Value': stack_name
+                            },
+                            {
+                                'Key': 'cfnctl_param_file',
+                                'Value': cfn_param_file_location 
+                            },
+                        ]
+                    )
+            except ClientError as e:
+                print(e.response['Error']['Message'])
+                return
+            
         stack_rc = self.stack_status(stack_name=stack_name)
 
         if stack_rc != 'CREATE_COMPLETE':
@@ -999,7 +1045,7 @@ class CfnControl:
                     print('{0:<38} = {1:<30}'.format(p['ParameterKey'], p['ParameterValue']))
             except Exception as e:
                 print("No Parameters found")
-                raise ValueError(e)
+                pass
 
             print("")
 
@@ -1009,7 +1055,6 @@ class CfnControl:
                     print('{0:<38} = {1:<30}'.format(o['OutputKey'], o['OutputValue']))
             except Exception as e:
                 print("No Outputs found")
-                #print(ValueError(e))
 
         print("")
         return
@@ -1151,32 +1196,6 @@ class CfnControl:
 
         self.cfn_param_file = cfn_param_file
 
-        if not os.path.isfile(cfn_param_file):
-            # create parameters file and dir
-            print("Creating parameters file {0}".format(cfn_param_file))
-            if not os.path.isdir(self.cfn_param_file_dir):
-                print("Creating parameters directory {0}".format(self.cfn_param_file_dir))
-                try:
-                    os.makedirs(self.cfn_param_file_dir)
-                except OSError as e:
-                    if e.errno != errno.EEXIST:
-                        raise
-        elif os.path.isfile(cfn_param_file):
-            cli_val = input("Parameters file {0} already exists, use this file [y/N]:  ".format(cfn_param_file))
-
-            if not cli_val:
-                cli_val = 'n'
-
-            if cli_val.lower().startswith("n"):
-                try:
-                    os.remove(cfn_param_file)
-                    self.cfn_param_file = cfn_param_file
-                except Exception as e:
-                    raise ValueError(e)
-            else:
-                # params file already build, nothing left to do here
-                return cfn_param_file
-
         if self.url_check(template):
             template_url = template
 
@@ -1202,6 +1221,7 @@ class CfnControl:
             json_content = json.loads(template_content)
         except json.decoder.JSONDecodeError:
             try:
+                # this converts yaml to json using cfn_flip.to_json
                 json_content = json.loads(to_json(template_content))
             except Exception as e:
                 print(e)
@@ -1212,6 +1232,41 @@ class CfnControl:
         if json_content == "":
             print("Template file is blank, exiting...")
             sys.exit()
+
+        try:
+            if (json_content['Parameters']):
+                pass
+        except KeyError:
+            message = 'The CloudFormation template does not have any parameters'
+            print(message)
+            return "NO_PARAM_FILE" 
+            sys.exit()
+
+        # create parameters file and dir
+        if not os.path.isfile(cfn_param_file):
+            print("Creating parameters file {0}".format(cfn_param_file))
+            if not os.path.isdir(self.cfn_param_file_dir):
+                print("Creating parameters directory {0}".format(self.cfn_param_file_dir))
+                try:
+                    os.makedirs(self.cfn_param_file_dir)
+                except OSError as e:
+                    if e.errno != errno.EEXIST:
+                        raise
+        elif os.path.isfile(cfn_param_file):
+            cli_val = input("Parameters file {0} already exists, use this file [y/N]:  ".format(cfn_param_file))
+
+            if not cli_val:
+                cli_val = 'n'
+
+            if cli_val.lower().startswith("n"):
+                try:
+                    os.remove(cfn_param_file)
+                    self.cfn_param_file = cfn_param_file
+                except Exception as e:
+                    raise ValueError(e)
+            else:
+                # params file already build, nothing left to do here
+                return cfn_param_file        
 
         for p in sorted(json_content['Parameters']):
             if json_content['Parameters'][p]['Type'] == 'AWS::EC2::VPC::Id':
