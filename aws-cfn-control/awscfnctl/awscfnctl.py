@@ -136,6 +136,9 @@ class CfnControl:
         self.template_body = None
         self.key_pairs = list()
 
+        # Set message level
+        self.INFO_LEVEL = 1
+
         # First API call - grab key pairs, this will determine if we can talk to the API
         #
         try:
@@ -178,6 +181,15 @@ class CfnControl:
 
             if not self.instances:
                 print("Instance list is null, continuing...")
+        
+        # Use the region default file if it exists
+        #  Default:  ~/.cfnparam/<region>.default, e.g. ~/.cfnparam/us-west-2.default
+        #
+        self.region_defaults = self.cfn_param_file_dir + '/' + self.region + '.default'
+        if os.path.exists(self.region_defaults): 
+            if self.INFO_LEVEL:
+                print('Using region defaults file', self.region_defaults, 'for parameters')
+                self.INFO_LEVEL = 0
 
     @staticmethod
     def runcmd(cmdlist):
@@ -465,17 +477,20 @@ class CfnControl:
             cfn_param_file = self.cfn_param_file
 
         if os.path.isfile(cfn_param_file):
-            print("Using parameters file: {0}".format(cfn_param_file))
+            if self.INFO_LEVEL:
+                print("Using parameters file: {0}".format(cfn_param_file))
             parser.read(cfn_param_file)
         elif os.path.isfile(os.path.join(self.cfn_param_file_dir, cfn_param_file + ".json.cf")):
-            print("Using parameters file: {0}".format(
-                os.path.join(self.cfn_param_file_dir, cfn_param_file + ".json.cf"))
-            )
+            if self.INFO_LEVEL:
+                print("Using parameters file: {0}".format(
+                    os.path.join(self.cfn_param_file_dir, cfn_param_file + ".json.cf"))
+                )
             parser.read(os.path.join(self.cfn_param_file_dir, cfn_param_file + ".json.cf"))
         elif os.path.isfile(os.path.join(self.cfn_param_file_dir, cfn_param_file)):
-            print("Using parameters file: {0}".format(
-                os.path.join(self.cfn_param_file_dir, cfn_param_file))
-            )
+            if self.INFO_LEVEL:
+                print("Using parameters file: {0}".format(
+                    os.path.join(self.cfn_param_file_dir, cfn_param_file))
+                )
             parser.read(os.path.join(self.cfn_param_file_dir, cfn_param_file))
         elif cfn_param_file == "NO_PARAM_FILE":
             return None
@@ -572,10 +587,23 @@ class CfnControl:
 
         print("Attempting to launch {}".format(stack_name))
 
+        cfn_param_file_location = None 
+        template_tags = [
+            {
+               'Key': 'Name',
+               'Value': stack_name
+            },
+            {
+               'Key': 'cfnctl_param_file',
+               'Value': cfn_param_file_location 
+            },
+        ]
+
         if self.cfn_param_file == "NO_PARAM_FILE":
             # there is no parameters file (cfn_param_fie == "NO_PARAM_FILE")
-            cfn_param_file_location = self.cfn_param_file 
 
+            # set the location of cfnctl_param_file 
+            template_tags[1]['Value'] = self.cfn_param_file 
             try:
                 if self.template_url:
                     response = self.client_cfn.create_stack(
@@ -584,16 +612,7 @@ class CfnControl:
                         TimeoutInMinutes=600,
                         Capabilities=['CAPABILITY_IAM'],
                         OnFailure=set_rollback,
-                        Tags=[
-                            {
-                                'Key': 'Name',
-                                'Value': stack_name
-                            },
-                            {
-                                'Key': 'cfnctl_param_file',
-                                'Value': cfn_param_file_location 
-                            },
-                        ]
+                        Tags=template_tags
                     )
                 elif self.template_body:
                     response = self.client_cfn.create_stack(
@@ -602,16 +621,7 @@ class CfnControl:
                         TimeoutInMinutes=600,
                         Capabilities=['CAPABILITY_IAM'],
                         OnFailure=set_rollback,
-                        Tags=[
-                            {
-                                'Key': 'Name',
-                                'Value': stack_name
-                            },
-                            {
-                                'Key': 'cfnctl_param_file',
-                                'Value': cfn_param_file_location 
-                            },
-                        ]
+                        Tags=template_tags
                     )
             except ClientError as e:
                 print(e.response['Error']['Message'])
@@ -635,8 +645,8 @@ class CfnControl:
                 else:
                     raise ValueError(e)
             
-            cfn_param_file_location = os.path.basename(self.cfn_param_file)
-
+            # set the location of cfnctl_param_file 
+            template_tags[1]['Value'] = os.path.basename(self.cfn_param_file)
             try:
                 if self.template_url:
                     response = self.client_cfn.create_stack(
@@ -646,16 +656,7 @@ class CfnControl:
                         TimeoutInMinutes=600,
                         Capabilities=['CAPABILITY_IAM'],
                         OnFailure=set_rollback,
-                        Tags=[
-                            {
-                                'Key': 'Name',
-                                'Value': stack_name
-                            },
-                            {
-                                'Key': 'cfnctl_param_file',
-                                'Value': cfn_param_file_location 
-                            },
-                        ]
+                        Tags=template_tags
                     )
                 elif self.template_body:
                     response = self.client_cfn.create_stack(
@@ -665,16 +666,7 @@ class CfnControl:
                         TimeoutInMinutes=600,
                         Capabilities=['CAPABILITY_IAM'],
                         OnFailure=set_rollback,
-                        Tags=[
-                            {
-                                'Key': 'Name',
-                                'Value': stack_name
-                            },
-                            {
-                                'Key': 'cfnctl_param_file',
-                                'Value': cfn_param_file_location 
-                            },
-                        ]
+                        Tags=template_tags
                     )
             except ClientError as e:
                 print(e.response['Error']['Message'])
@@ -1131,16 +1123,33 @@ class CfnControl:
         return self.vpc_id
 
 
-    def get_cli_value(self, json_content, p, prompt_msg):
+    def get_cli_value(self, json_content, p, prompt_msg, param_key=None):
 
         cli_val = ""
         default_val = ""
+
+        # Use region defaults file first
+        if os.path.exists(self.region_defaults): 
+            self.read_cfn_param_file(self.region_defaults)
+        
+        if json_content['Parameters'][p]['Type'] == 'AWS::EC2::VPC::Id':
+            param_key = p
+
+
+        # Look for "Default" values in the CF template
         try:
             default_val = json_content['Parameters'][p]['Default']
         except KeyError:
             pass
 
-        cli_val = input('{0} [{1}]: '.format(prompt_msg, default_val))
+        # Override the default value in the template
+        # Look for values in the parameter file 
+        try:
+            default_val = self.cfn_param_file_values[param_key]
+        except KeyError:
+            pass
+
+        cli_val = input('{0} ({1}) [{2}]: '.format(prompt_msg, param_key, default_val))
 
         if cli_val == "":
             cli_val = default_val
@@ -1235,6 +1244,8 @@ class CfnControl:
 
         try:
             if (json_content['Parameters']):
+                #for k in (json_content['Parameters']):
+                #    print('key: ', k)
                 pass
         except KeyError:
             message = 'The CloudFormation template does not have any parameters'
@@ -1252,6 +1263,7 @@ class CfnControl:
                 except OSError as e:
                     if e.errno != errno.EEXIST:
                         raise
+
         elif os.path.isfile(cfn_param_file):
             cli_val = input("Parameters file {0} already exists, use this file [y/N]:  ".format(cfn_param_file))
 
@@ -1271,8 +1283,10 @@ class CfnControl:
         for p in sorted(json_content['Parameters']):
             if json_content['Parameters'][p]['Type'] == 'AWS::EC2::VPC::Id':
                 self.vpc_variable_name=p
+        
 
         for p in sorted(json_content['Parameters']):
+            param_key = p
 
             default_val = None
             cli_val = None
@@ -1294,7 +1308,7 @@ class CfnControl:
                         print('  {0}'.format(k))
 
                     prompt_msg = "Select EC2 Key"
-                    cli_val = self.get_cli_value(json_content, p, prompt_msg)
+                    cli_val = self.get_cli_value(json_content, p, prompt_msg, param_key)
 
                     if cli_val not in self.key_pairs:
                         print("Valid EC2 Key Pair required.  Exiting... ")
@@ -1341,8 +1355,8 @@ class CfnControl:
                         except KeyError:
                             print('  {0} | {1}'.format(subnet_id, subnet_info['AvailabilityZone']))
 
-                    prompt_msg = "Select subnet:"
-                    cli_val = self.get_cli_value(json_content, p, prompt_msg)
+                    prompt_msg = "Select subnet"
+                    cli_val = self.get_cli_value(json_content, p, prompt_msg, param_key)
 
                     if cli_val not in subnet_ids:
                         print("Valid subnet ID required.  Exiting... ")
@@ -1370,7 +1384,7 @@ class CfnControl:
                         security_group_ids.append(r['GroupId'])
                         print('  {0} | {1}'.format(r['GroupId'], r['GroupName'][0:20]))
                     prompt_msg = "Select secuirty group"
-                    cli_val = self.get_cli_value(json_content, p, prompt_msg)
+                    cli_val = self.get_cli_value(json_content, p, prompt_msg, param_key)
                     if cli_val not in security_group_ids:
                         print("Valid security group required.  Exiting... ")
                         self.rm_cfn_param_file(cfn_param_file)
@@ -1386,6 +1400,7 @@ class CfnControl:
                 param_type = json_content['Parameters'][p]['Type']
             except KeyError:
                 pass
+
 
             if cli_val is None and p not in value_already_set:
                 try:
@@ -1424,8 +1439,13 @@ class CfnControl:
 
                         except KeyError:
                             pass
+                    
+                    ## Grab any defaults from the region default file
+                    if os.path.exists(self.region_defaults): 
+                        self.read_cfn_param_file(self.region_defaults)
+                        default_val = self.cfn_param_file_values[p]
 
-                    cli_val = input('{0} [{1}]: '.format(p, default_val))
+                    cli_val = input('Select {0} [{1}]: '.format(p, default_val))
 
                     if cli_val == "":
                         cli_val = default_val
