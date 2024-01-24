@@ -106,7 +106,13 @@ def main():
 
     client = CfnControl(region=region, aws_profile=aws_profile, cfn_action=cfn_action)
 
-    if ls_all_stack_info or ls_stacks:
+    if ls_stacks and stack_name:
+        stacks = client.ls_stacks(show_deleted=False)
+        for stack, i in sorted(stacks.items()):
+            if stack_name == stack:
+                client.get_stack_info(stack_name=stack_name)
+
+    elif ls_all_stack_info or ls_stacks:
         if ls_all_stack_info and ls_stacks:
             print("Gathering all info on CFN stacks...")
             stacks = client.ls_stacks(show_deleted=False)
