@@ -186,9 +186,9 @@ class CfnControl:
         #  Default:  ~/.cfnparam/<region>.default, e.g. ~/.cfnparam/us-west-2.default
         #
         self.region_defaults = self.cfn_param_file_dir + '/' + self.region + '.default'
-        if os.path.exists(self.region_defaults): 
-            if self.INFO_LEVEL:
-                print('Using region defaults file', self.region_defaults, 'for parameters')
+        if os.path.exists(self.region_defaults) and self.INFO_LEVEL: 
+            if self.cfn_action == "build" or self.cfn_action == "create":
+                print('Using region defaults file', self.region_defaults, 'for parameter defaults')
                 self.INFO_LEVEL = 0
 
     @staticmethod
