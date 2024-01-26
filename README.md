@@ -116,14 +116,14 @@ Select subnet: [subnet-abbbcccbbbbcd1235]:
 
 #### Using a region defaults file
 
-You can set parameter defaults with a region defaults file located in the ~/.cfnparam directory, for example ~/.cfnparam/<region>.default. If the region defaults file exists, then that file will be used for default values. This will override the existing default value in the template. The region names used will be the AWS API region name, for example: us-west-2, us-east-1, etc.
+You can set parameter defaults with a region defaults file located in the ```~/.cfnparam directory,``` for example ```~/.cfnparam/<region>.default```. If the region defaults file exists, then that file will be used for default values. This will override the existing default value in the template. The region names used will be the AWS API region name, for example: us-west-2, us-east-1, etc.
 
 If the region defaults file exists, you should see this message when running the ```create``` command:
 ```text
 Using region defaults file /Users/joeuser/.cfnparam/us-east-2.default for parameter defaults
 ```
 
-You can create the region defaults file by first creating a paramaters file using the ```build``` command. Then move or copy that parameters file to the region defaults file.
+You can create the region defaults file by first creating a paramaters file using the ```build``` command, then move or copy that parameters file to the region defaults file.
 
 #### Required parameters
 
