@@ -1,6 +1,6 @@
 # AWS CFN Control [![Build Status](https://app.travis-ci.com/awslabs/aws-cfn-control.svg?branch=master)](https://travis-ci.org/awslabs/aws-cfn-control) [![PyPi Status](https://badge.fury.io/py/aws-cfn-control.png)](https://badge.fury.io/py/aws-cfn-control)
 
-AWS-CFN-Control provides a command line interface to quickly deploy and redeploy [AWS CloudFormation stacks](https://aws.amazon.com/cloudformation/). The `cfnctl` command provides the core functionality, with several other commands that will find AMI info, get stack status, build CloudFormation mappings, and other features. AWS-CFN-Control is very useful for CloudFormation templates that have parameters, and you want to create stacks with the same parameters in multiple regions, or you want to change just a few parameters values for a new stack.
+AWS-CFN-Control provides a command line interface to quickly deploy and redeploy [AWS CloudFormation stacks](https://aws.amazon.com/cloudformation/). The `cfnctl` command provides the core functionality, with several other commands that will find AMI info, get stack status, build CloudFormation mappings, and other features. AWS CFN Control will handle CloudFormation templates that have parameters, and you want to create stacks with the same parameters in multiple regions, or you want to change just a few parameters values for a new stack.
 
 
 ## License
@@ -44,6 +44,9 @@ This second command (using -f) uses an existing parameters file, which has the t
 
 ```cfnctl list```
 
+#### List detials of one existing stack 
+
+```cfnctl list -n stack001```
 
 #### Delete a stack
 
@@ -110,6 +113,17 @@ Getting subnets for vpc-0000aaaa1111bbbb2 ...
   subnet-aaabbbbcccbcd1237 | us-east-1d
 Select subnet: [subnet-abbbcccbbbbcd1235]: 
 ```
+
+#### Using a region defaults file
+
+You can set parameter defaults with a region defaults file located in the ~/.cfnparam directory, for example ~/.cfnparam/<region>.default. If the region defaults file exists, then that file will be used for default values. This will override the existing default value in the template. The region names used will be the AWS API region name, for example: us-west-2, us-east-1, etc.
+
+If the region defaults file exists, you should see this message when running the ```create``` command:
+```text
+Using region defaults file /Users/joeuser/.cfnparam/us-east-2.default for parameter defaults
+```
+
+You can create the region defaults file by first creating a paramaters file using the ```build``` command. Then move or copy that parameters file to the region defaults file.
 
 #### Required parameters
 
@@ -303,6 +317,9 @@ InstanceID                             = i-00011100022200333
 InstancePublicIP                       = 54.12.11.13 
 InstancePrivateIP                      = 172.25.5.5
 ```
+
+## Change Log
+
 
 ## ToDo list
 
