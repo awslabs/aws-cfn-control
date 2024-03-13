@@ -96,10 +96,13 @@ def main():
                 "the template (-t) flag or for configured stacks, the -f flag for parameters file, " \
                 "which includes the template location"
 
-    aws_profile = 'NULL'
+    aws_profile = None 
     if args.aws_profile:
         aws_profile = args.aws_profile
-        print('Using profile {0}'.format(aws_profile))
+        # print('Using profile {0}'.format(aws_profile))
+    else:
+        aws_profile = os.environ.get('AWS_DEFAULT_PROFILE', None)
+        # print('Using environment variable profile {0}'.format(aws_profile))
 
     if args.no_rollback:
         rollback = 'DO_NOTHING'

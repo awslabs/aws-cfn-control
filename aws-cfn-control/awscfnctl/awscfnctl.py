@@ -18,6 +18,7 @@ import time
 import json
 import errno
 import boto3
+import botocore
 import operator
 import textwrap
 import subprocess
@@ -60,7 +61,7 @@ class CfnControl:
         self.aws_profile = kwords.get('aws_profile')
         if not self.aws_profile:
             self.aws_profile = 'default'
-        elif self.aws_profile == 'NULL':
+        elif self.aws_profile == None:
             self.aws_profile = 'default'
 
         print('Using AWS credentials profile "{0}"'.format(self.aws_profile))
@@ -80,6 +81,15 @@ class CfnControl:
         # boto resources
         self.s3 = self.session.resource('s3')
         self.ec2 = self.session.resource('ec2', region_name=self.region)
+
+        # test api connection
+        try:
+            for bucket in self.s3.buckets.all():
+                pass
+        except botocore.exceptions.NoCredentialsError as e:
+            print(e, '"' + self.aws_profile + '", exiting...')
+            sys.exit(1) 
+             
 
         # boto clients
         self.client_ec2 = self.session.client('ec2', region_name=self.region)
@@ -143,14 +153,15 @@ class CfnControl:
         #
         try:
             key_pairs_response = self.client_ec2.describe_key_pairs()
+            for pair in (key_pairs_response['KeyPairs']):
+                self.key_pairs.append(pair['KeyName'])
         except EndpointConnectionError as e:
             errmsg = "Please make sure that the region specified ({0}) is valid\n".format(self.region)
             raise ValueError(errmsg + str(e))
+        except botocore.exceptions.NoCredentialsError as e:
+            pass 
         except Exception as e:
             raise ValueError(e)
-
-        for pair in (key_pairs_response['KeyPairs']):
-            self.key_pairs.append(pair['KeyName'])
 
         # For some lists, we only want to print out certain keys:
         #
